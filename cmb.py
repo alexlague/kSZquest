@@ -10,8 +10,7 @@ class CMBMap:
     def __init__(self, 
                  kSZMap, 
                  CosmoParams, 
-                 LMAX, 
-                 NSIDE,
+                 LMAX,
                  minRA=0., 
                  maxRA=0., 
                  minDEC=0., 
@@ -20,8 +19,17 @@ class CMBMap:
                  theta_FWHM=None, 
                  beam=None):
         '''
-        noise in muK arcmin
-        theta_FWHM in arcmin
+        CMB Map storing data about microwave sky in
+        pixell format
+        
+        Inputs:
+        kSZMap: 2d numpy array of temperature fluctuations in K
+        CosmoParams: dictionary of cosmological parameters with 6 LCDM params
+        LMAX: maximum ell to at which to generate the primary CMB and noise maps
+        min/max RA/DEC: corners of the map in degrees
+        noise_lvl: noise of CMB instrument in muK arcmin (needed only if generating noise map)
+        theta_FWHM: in arcmin (optional for noise computation)
+        beam: beam of the CMB instrument (needed only if convolving with beam)
         '''
         
         
@@ -37,10 +45,12 @@ class CMBMap:
         self.Nmesh_x = kSZMap.shape[0]
         self.Nmesh_y = kSZMap.shape[1]
         
-        if not (noise_lvl == None):
+        if noise_lvl != None:
             self.noise_lvl = noise_lvl
-        if not (noise_lvl == None):
+        if theta_FWHM != None:
             self.theta_FWHM = theta_FWHM
+        if beam != None:
+            self.beam
 
         shape, wcs = self.GenerateMapTemplate()
         kSZ_map_pixell = enmap.empty(shape, wcs)
@@ -53,6 +63,13 @@ class CMBMap:
     
     def CalculateTheoryCls(self):
         '''
+        Calculate the power spectrum of the CMB anisotropies
+        given cosmological model assuming flat LCDM
+        (monopole and dipole not removed)
+        
+        Outputs:
+        self.ls: \ell
+        self.cltt: C_\ell^{TT}
         '''
         #Set up a new set of parameters for CAMB
         # TODO: unpack cosmo params
@@ -84,6 +101,15 @@ class CMBMap:
         return
     
     def GenerateMapTemplate(self):
+        '''
+        Create shape and wcs needed to create pixell maps
+        from numpy 2d arrays
+        
+        Outputs:
+        shape: tuple
+        wcs: pixell world coordinate system
+        '''
+        
         RA_range = self.maxRA - self.minRA # deg
         DEC_range = self.maxDEC - self.minDEC # deg
         
@@ -106,6 +132,12 @@ class CMBMap:
     
     def GeneratePrimaryCMB(self):
         '''
+        Create a realization of the primary CMB from the
+        choice of cosmological parameters
+        The shape of the map matches that of the input kSZ map
+
+        Outputs:
+        self.primary_cmb_map in units of K
         '''
         
         if hasattr(self, "cltt"):
@@ -151,19 +183,15 @@ class CMBMap:
         
         return
     
-    def FilterCMB(self):
+    def CombineMaps(self):
         '''
         '''
-        if hasattr(self, "cltt"):
-            ls = self.ls
-            cltt = self.cltt
-        else:
+        if not hasattr(self, "cltt"):
             self.CalculateTheoryCls()
-            ls = self.ls
-            cltt = self.cltt
-        
+
         # Combine maps+cls computed so far
         self.combined_cmb_map = self.kSZ_map.copy()
+        
         if hasattr(self, "cmb_noise_map") and hasattr(self, "primary_cmb_map"):
             self.cltotal = self.cltt + self.nltt
             self.combined_cmb_map += self.cmb_noise_map + self.primary_cmb_map
@@ -174,6 +202,17 @@ class CMBMap:
             self.cltotal = self.nltt
             self.combined_cmb_map += self.cmb_noise_map
         
+        return
+        
+    def FilterCMB(self):
+        '''
+        '''
+        self.CombineMaps()
+        
+        # Convolve with beam
+        if hasattr(self, "beam"):
+            self.combined_cmb_map = enmap.smooth_gauss(self.combined_cmb_map, self.beam)
+            
         ps = self.cltotal
         fl = 1./ps
         fl[np.isnan(fl)] = 0.
@@ -193,3 +232,25 @@ class CMBMap:
         self.filtered_cmb_map = filtered
         
         return
+
+
+    def PrepareRecon(self, AddPrimary=True, AddNoise=True, DoFilter=True):
+        '''
+        '''
+        
+        if AddPrimary:
+            self.CalculateTheoryCls()
+            self.GeneratePrimaryCMB()
+        
+        if AddNoise:
+            self.GenerateCMBNoise()
+        
+        if DoFilter:
+            self.FilterCMB()
+            outmap = self.filtered_cmb_map
+        
+        else:
+            self.CombineMaps()
+            outmap = self.combined_cmb_map
+
+        return outmap
