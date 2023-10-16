@@ -120,6 +120,28 @@ class NBodySim:
 
         return
     
+    # From U. Giri
+    def prefactor(self)-> float:
+        """The coefficient which appears before the integral term in kSZ
+        Returns:
+        float -- The coefficient
+        """
+        #mtompc = 3.24078e-23
+        #rho_critical = 1e-26/mtompc**3
+        rho_critical = self.cosmo.rho_crit(0) # 10^{10} (M_\odot/h) (\mathrm{Mpc}/h)^{-3}
+        omega_b = self.cosmo.Omega_b(0)
+        h = self.cosmo.h
+        Tcmb = self.cosmo.T0_cmb * 1e6 #K
+        n_e0 = (rho_critical * omega_b) / (1.14*constants.proton_mass)
+        sigmaT = constants.physical_constants['Thomson cross section'][0]*mtompc**2
+        x_e = 1.0; exptau = 1.0
+        speed_of_light = constants.speed_of_light/1e3 # km/s
+        K_star = self.Tcmb * n_e0 * sigmaT * x_e * exptau #/ speed_of_light not necessary because of units of q field?
+    
+        Chi = self.cosmo.comoving_distance(self.Redshift) # Mpc/h
+        
+        return K_star / Chi**2 * (1+self.Redshift)**2
+    
     def to_LightCone(zBins, NzBins, nbar):
         '''
         Transform the cubic box to a lightcone with a mask and N(z)

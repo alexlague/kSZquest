@@ -5,6 +5,7 @@ from a CMB map and a halo density field
 
 import numpy as np
 from scipy.interpolate import interp1d, RectBivariateSpline
+from scipy import constants
 
 import nbodykit
 from nbodykit.lab import *
@@ -13,7 +14,6 @@ from pixell import enmap
 
 import lightcone
 import nbody
-
 
 def CheckSource(Source):
     if type(Source) not in [nbody.NBodySim, lightcone.LightCone]:
