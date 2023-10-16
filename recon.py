@@ -9,6 +9,8 @@ from scipy.interpolate import interp1d, RectBivariateSpline
 import nbodykit
 from nbodykit.lab import *
 
+from pixell import enmap
+
 import lightcone
 import nbody
 
@@ -138,7 +140,7 @@ def Delta_eField(Source, FilterDictionary):
 
     return delta_e_field
 
-def CalculateNoise(Source, Field, FilterDictionary):
+def CalculateNoise(Source, Field, FilterDictionary, ClMap=None, RA=None, DEC=None):
     '''
     Calculation of the noise for the quadratic estimator
     '''
@@ -150,16 +152,21 @@ def CalculateNoise(Source, Field, FilterDictionary):
     ones_field_k[np.isnan(ones_field_k)] = 0.
     
     pge2_pgg_filter = FilterDictionary['pge2_pgg']
-    ones_field_k = ones_field_k.apply(pge2_pgg_filter, kind='wavenumber')
-    
+    ones_field_k    = ones_field_k.apply(pge2_pgg_filter, kind='wavenumber')
+
     f_1_of_x = ones_field_k.c2r()
     
-    noise_of_k = f_1_of_x.r2c()
-
+    if type(ClMap) == np.ndarray or type(ClMap) == enmap.ndmap:
+        f_2_of_x = CreateTGrid(Source, ClMap, RA=RA, DEC=DEC)
+        noise_of_k = (f_1_of_x * f_2_of_x).r2c()
+        
+    else:
+        noise_of_k = f_1_of_x.r2c()
+        
     return noise_of_k
 
 
-def RunReconstruction(Source, CMBMap, RA=None, DEC=None, ComputePower=True, dk=5e-3, Iso=True, Nmu=5):
+def RunReconstruction(Source, CMBMap, ClMap=None, RA=None, DEC=None, ComputePower=True, dk=5e-3, Iso=True, Nmu=5):
     '''
     Input: Source - Either nbodysim or lightcone object
     '''
@@ -170,7 +177,7 @@ def RunReconstruction(Source, CMBMap, RA=None, DEC=None, ComputePower=True, dk=5
     filter_dict     = CreateFilters(Source, Iso=Iso)
     delta_e_field   = Delta_eField(Source, filter_dict)
     delta_e_times_T = delta_e_field * T_grid
-    noise_of_k      = CalculateNoise(Source, delta_e_times_T, filter_dict)
+    noise_of_k      = CalculateNoise(Source, delta_e_times_T, filter_dict, ClMap=ClMap, RA=RA, DEC=DEC)
     vhat_of_k       = (noise_of_k)**-1 * delta_e_times_T.r2c()
     vhat            = vhat_of_k.c2r()
     

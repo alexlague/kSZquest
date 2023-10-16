@@ -35,7 +35,6 @@ class CMBMap:
         
         self.CosmoParams = CosmoParams
         self.LMAX = LMAX
-        self.NSIDE = NSIDE
         
         self.minRA = minRA
         self.maxRA = maxRA
@@ -231,6 +230,13 @@ class CMBMap:
         
         self.filtered_cmb_map = filtered
         
+        
+        # integrand for noise computation
+        one_over_cl_map = fl2d*kmap/kmap
+        one_over_cl_map[np.isnan(one_over_cl_map)] = 0
+        one_over_cl_map_ifft = enmap.ifft(one_over_cl_map, normalize="phys").real
+        self.one_over_cl_map = fl2d * one_over_cl_map_ifft
+
         return
 
 
@@ -247,7 +253,7 @@ class CMBMap:
         
         if DoFilter:
             self.FilterCMB()
-            outmap = self.filtered_cmb_map
+            outmap = [self.filtered_cmb_map, self.one_over_cl_map]
         
         else:
             self.CombineMaps()
