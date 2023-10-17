@@ -4,7 +4,8 @@ or generated using an Nbody class
 '''
 
 import numpy as np
-from scipy.interpolate import InterpolatedUnivariateSpline
+from scipy.interpolate import InterpolatedUnivariateSpline, RegularGridInterpolator
+from scipy.optimize import minimize
 
 import nbodykit
 from nbodykit.lab import *
@@ -106,6 +107,9 @@ class LightCone:
             self.nofz = InterpolatedUnivariateSpline(zhist.bin_centers, self.alpha*zhist.nbar)
 
         return
+
+    def ComputeZeff(self):
+        return
     
     def PaintMesh(self):
         self.mesh = self.fkp.to_mesh(Nmesh=self.Nmesh, nbar='NZ', fkp_weight='FKPWeight')
@@ -113,9 +117,52 @@ class LightCone:
         return
     
     def CalculateMultipoles(self, poles=[0, 2, 4], kmin=0.0, kmax=0.3, dk=5e-3):
-        self.r = ConvolvedFFTPower(self.mesh, poles=poles, dk=dk, kmin=kmin)
+        self.r = ConvolvedFFTPower(self.mesh, poles=poles, dk=dk, kmin=kmin).poles
         return
 
-    def FitPgg(self):
-        self.Phh = Pggtot
+    def GetPowerSpectraModel(self):
+        nzbins = 10
+        ls = np.arange(1000)
+        zs = np.linspace(self.minZ, self.maxZ, nzbins)
+        zs_edges = np.linspace(self.minZ, self.maxZ, nzbins+1)
+        chis = self.cosmo.comoving_distance(zs_edges) / self.cosmo.h # switch to Mpc
+        volumes = 4 * np.pi/3 * self.FSKY * np.array([chis[i+1]-chis[i] for i in range(nzbins)])**3
+        volumes /= 1000**3 # to Gpc^3
+        ngals = self.nofz(zs) * self.cosmo.h**3 # to 1/Mpc^3
+        
+        model = get_ksz_auto_squeezed(np.arange(1000), volumes, zs, ngals_mpc3=ngals, params=self.CosmoParams, template=True, rsd=True)
+        
+        self.model = model[2]
+        
         return
+        
+    def FitPgg(self):
+        
+        nzbins = len(self.model['lPggtot'])
+        zs = np.linspace(self.minZ, self.maxZ, nzbins)
+
+        # TODO: check ell normaliztion of missing 1/2
+        Pell0   = np.trapz(self.model['lPggtot'], np.linspace(-1, 1, 102), axis=-1).T # intergate over mu
+        Pell0_interp = RegularGridInterpolator((self.model['ks'], zs), Pell0)
+        
+        if hasattr(self, "zeff"):
+            P0 = lambda k: Pell0_interp(k, self.zeff, grid=False)
+        else:
+            P0 = lambda k: Pell0_interp(k, (self.maxZ+self.minZ)/2, grid=False)
+            
+        P0_data = self.r['power_0']
+        k_data  = self.r['k']
+        
+        # take difference in power on large scales to correct galaxy bias
+        to_min  = lambda bg_over_bg_fid: (bg_over_bgfid * P0(k_data[k_data<=0.07]) - P0_data[k_data<=0.07])**2
+        
+        best_fit_bg = minimize(to_min, x0=1.)['x']
+        
+        self.bg_correction = best_fit_bg
+        
+        
+        
+        return
+
+
+        
