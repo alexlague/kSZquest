@@ -134,6 +134,18 @@ class LightCone:
         
         self.model = model[2]
         
+        # Getting Pkmu at zeff
+        mus = np.linspace(-1, 1, len(self.model['sPgg'][0, 0, :]))
+        Pmh_kmu_interp = RegularGridInterpolator((zs, self.model['ks'], mus), self.model['sPge'])
+        Phh_kmu_interp = RegularGridInterpolator((zs, self.model['ks'], mus), self.model['sPggtot'])
+
+        if hasattr(self, "zeff"):
+            self.Pmh_kmu = lambda k, mu: Pmh_kmu_interp(zeff, k, mu)
+            self.Phh_kmu = lambda k, mu: Phh_kmu_interp(zeff, k, mu)
+        else:
+            self.Pmh_kmu = lambda k, mu: Pmh_kmu_interp((self.maxZ+self.minZ)/2, k, mu)
+            self.Phh_kmu = lambda k, mu: Phh_kmu_interp((self.maxZ+self.minZ)/2, k, mu)
+            
         return
         
     def FitPgg(self):
@@ -142,7 +154,7 @@ class LightCone:
         zs = np.linspace(self.minZ, self.maxZ, nzbins)
 
         # TODO: check ell normaliztion of missing 1/2
-        Pell0   = np.trapz(self.model['lPggtot'], np.linspace(-1, 1, 102), axis=-1).T # intergate over mu
+        Pell0   = np.trapz(self.model['lPggtot'], np.linspace(-1, 1, 102), axis=-1).T # integrate over mu
         Pell0_interp = RegularGridInterpolator((self.model['ks'], zs), Pell0)
         
         if hasattr(self, "zeff"):
@@ -150,7 +162,7 @@ class LightCone:
         else:
             P0 = lambda k: Pell0_interp(k, (self.maxZ+self.minZ)/2, grid=False)
             
-        P0_data = self.r['power_0']
+        P0_data = self.r['power_0'].real
         k_data  = self.r['k']
         
         # take difference in power on large scales to correct galaxy bias
@@ -160,9 +172,5 @@ class LightCone:
         
         self.bg_correction = best_fit_bg
         
-        
-        
         return
-
-
         
