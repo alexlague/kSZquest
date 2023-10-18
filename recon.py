@@ -118,7 +118,30 @@ def CreateFilters(Source, Iso=True):
             return v * fil # apply delta_e filter
 
     elif type(Source) == lightcone.LightCone:
-        pass # TODO
+
+        # Load Pgg and Pge from model
+        Pge = self.Pge_kmu
+        Pgg = self.Pgg_kmu
+
+        def pge_pgg_filter(k, v):
+            kk = sum(ki ** 2 for ki in k) # k^2 on the mesh
+            kk[kk == 0] = 1
+            mu = k[2] / kk
+            num = Pge(np.sqrt(kk), mu)
+            den = Pgg(np.sqrt(kk), mu)
+            fil = num / den
+            fil[np.isnan(fil)] = 1.
+            return v * fil
+        
+        def pge2_pgg_filter(k, v):
+            kk = sum(ki ** 2 for ki in k) # k^2 on the mesh
+            kk[kk == 0] = 1
+            mu = k[2] / kk
+            num = Pge(np.sqrt(kk), mu)
+            den = Pgg(np.sqrt(kk), mu)
+            fil = num**2 / den
+            fil[np.isnan(fil)] = 1.
+            return v * fil
 
 
     filter_dict['pge_pgg'] = pge_pgg_filter
@@ -188,7 +211,7 @@ def RunReconstruction(Source, CMBMap, ClMap=None, RA=None, DEC=None, ComputePowe
         
         return vhat, Pk_vv, Pk_vq, Pk_qq
 
-    if type(Source) == nbody.NBodySim and ComputePower and Iso==False:
+    elif type(Source) == nbody.NBodySim and ComputePower and Iso==False:
         Pk_vv = FFTPower(vhat_of_k, mode='2d', dk=dk, kmax=0.3, kmin=0, Nmu=Nmu).power
         Pk_vq = FFTPower(vhat_of_k, second=Source.particle_momentum_mesh, mode='2d', dk=dk, kmax=0.3, kmin=0, Nmu=Nmu).power
         Pk_qq = FFTPower(Source.particle_momentum_mesh, mode='2d', dk=dk, kmax=0.3, kmin=0, Nmu=Nmu).power
@@ -198,6 +221,7 @@ def RunReconstruction(Source, CMBMap, ClMap=None, RA=None, DEC=None, ComputePowe
     elif type(Source) == lightcone.LightCone and ComputePower:
         # TODO: add 3d pk mu
         Pk_vv = ConvolvedFFTPower(vhat_of_k, mode='1d', poles=[0, 2], dk=dk, kmax=0.3, kmin=0,).power
+        Pk_vg = ConvolvedFFTPower(vhat_of_k, second=Source.halo_mesh, mode='1d', poles=[0, 2], dk=dk, kmax=0.3, kmin=0,).power
         
         return vhat, Pk_vv #TODO Pk_vq
     

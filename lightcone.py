@@ -15,7 +15,7 @@ class LightCone:
     Lightcone class to store RA, DEC, z and compute multipole moments 
     '''
 
-    def __init__(self, FSKY, CosmoParams=None):
+    def __init__(self, FSKY, Nmesh=64, CosmoParams=None):
         if CosmoParams == None:
             print("No cosmological parameters specified: assuming Planck15")
             self.cosmo = cosmology.Planck15
@@ -23,12 +23,25 @@ class LightCone:
             pass #TODO
 
         self.FSKY = FSKY
+        self.Nmesh = Nmesh
         
         return
 
-    def LoadGalaxies(self, SimDir, SimType, GenerateRand=False):
+    def LoadGalaxies(self, SimDir, SimType, GenerateRand=False, zmin=0.0, zmax=5.0):
         if SimType=='Magneticum':
             halos = np.loadtxt(SimDir)
+            flag = halos[:,17]
+            halos = halos[flag==0]
+            xpix     = halos[:,1]
+            ypix     = halos[:,2]
+            z_obs    = halos[:,7]
+
+            ind = (z_obs <= zmax) & (z_obs >= zmin)
+            
+            self.data = {}
+            self.data['ra'] = (xpix[ind]-.5) * 35
+            self.data['dec'] = (ypix[ind]-.5) * 35
+            self.data['z'] = z_obs[ind]
         else:
             raise Exception("Simulation type not implemented")
         
@@ -38,6 +51,9 @@ class LightCone:
         self.maxDEC = self.data['dec'].max()
         self.minZ = self.data['z'].min()
         self.maxZ = self.data['z'].max()
+
+        # Store in ArrayCatalog object
+        self.data = ArrayCatalog(self.data)
 
         # Include Cartesian coords
         self.data['Position'] = transform.SkyToCartesian(self.data['ra'], self.data['dec'], self.data['z'], cosmo=self.cosmo)
@@ -85,13 +101,21 @@ class LightCone:
         hzs = self.randoms['z']
         dist = self.nofz(hzs) # distribution
         dist /= np.sum(dist) # normalized
-        Nrand = alpha * self.data.csize
+        Nrand =  self.data.csize / alpha
 
         his = np.random.choice(h_indexes, size=int(Nrand), p=dist, replace=False) # indexes of selected halos
 
-        self.randoms['z'] = self.randoms['z'][his]
-        self.randoms['ra'] = self.randoms['ra'][his]
-        self.randoms['dec'] = self.randoms['dec'][his]
+        # TODO: fix waaayy too slow
+        ind = np.zeros(len(self.randoms['z']))
+        for i in range(len(ind)):
+            if i in his:
+                ind[i] = True
+            else:
+                ind[i] = False
+
+        self.randoms['z'] = self.randoms['z'][ind]
+        self.randoms['ra'] = self.randoms['ra'][ind]
+        self.randoms['dec'] = self.randoms['dec'][ind]
 
         self.randoms['Position'] = transform.SkyToCartesian(self.randoms['ra'], self.randoms['dec'], self.randoms['z'], cosmo=self.cosmo)
         
@@ -100,10 +124,10 @@ class LightCone:
     def CalculateNofZ(self, UseData=False):
         
         if UseData:
-            zhist = RedshiftHistogram(self.data, FSKY, self.cosmo, redshift='z')
+            zhist = RedshiftHistogram(self.data, self.FSKY, self.cosmo, redshift='z')
             self.nofz = InterpolatedUnivariateSpline(zhist.bin_centers, zhist.nbar)
         else:
-            zhist = RedshiftHistogram(self.randoms, FSKY, self.cosmo, redshift='z')
+            zhist = RedshiftHistogram(self.randoms, self.FSKY, self.cosmo, redshift='z')
             self.nofz = InterpolatedUnivariateSpline(zhist.bin_centers, self.alpha*zhist.nbar)
 
         return
@@ -112,12 +136,12 @@ class LightCone:
         return
     
     def PaintMesh(self):
-        self.mesh = self.fkp.to_mesh(Nmesh=self.Nmesh, nbar='NZ', fkp_weight='FKPWeight')
+        self.galaxy_mesh = self.fkp.to_mesh(Nmesh=self.Nmesh, nbar='NZ', fkp_weight='FKPWeight')
         
         return
     
     def CalculateMultipoles(self, poles=[0, 2, 4], kmin=0.0, kmax=0.3, dk=5e-3):
-        self.r = ConvolvedFFTPower(self.mesh, poles=poles, dk=dk, kmin=kmin).poles
+        self.r = ConvolvedFFTPower(self.galaxy_mesh, poles=poles, dk=dk, kmin=kmin).poles
         return
 
     def GetPowerSpectraModel(self):
@@ -136,15 +160,15 @@ class LightCone:
         
         # Getting Pkmu at zeff
         mus = np.linspace(-1, 1, len(self.model['sPgg'][0, 0, :]))
-        Pmh_kmu_interp = RegularGridInterpolator((zs, self.model['ks'], mus), self.model['sPge'])
-        Phh_kmu_interp = RegularGridInterpolator((zs, self.model['ks'], mus), self.model['sPggtot'])
+        Pge_kmu_interp = RegularGridInterpolator((zs, self.model['ks'], mus), self.model['sPge'])
+        Pgg_kmu_interp = RegularGridInterpolator((zs, self.model['ks'], mus), self.model['sPggtot'])
 
         if hasattr(self, "zeff"):
-            self.Pmh_kmu = lambda k, mu: Pmh_kmu_interp(zeff, k, mu)
-            self.Phh_kmu = lambda k, mu: Phh_kmu_interp(zeff, k, mu)
+            self.Pge_kmu = lambda k, mu: Pge_kmu_interp(zeff, k, mu)
+            self.Pgg_kmu = lambda k, mu: Pgg_kmu_interp(zeff, k, mu)
         else:
-            self.Pmh_kmu = lambda k, mu: Pmh_kmu_interp((self.maxZ+self.minZ)/2, k, mu)
-            self.Phh_kmu = lambda k, mu: Phh_kmu_interp((self.maxZ+self.minZ)/2, k, mu)
+            self.Pge_kmu = lambda k, mu: Pge_kmu_interp((self.maxZ+self.minZ)/2, k, mu)
+            self.Pgg_kmu = lambda k, mu: Pgg_kmu_interp((self.maxZ+self.minZ)/2, k, mu)
             
         return
         
