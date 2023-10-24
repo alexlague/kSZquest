@@ -238,7 +238,13 @@ class CMBMap:
         self.one_over_cl_map = fl2d * one_over_cl_map_ifft
 
         return
+    
+    @property
+    def shape(self):
+        return np.array(self.kSZ_map).shape
 
+    def to_array(self):
+        return np.array(self.kSZ_map)
 
     def PrepareRecon(self, AddPrimary=True, AddNoise=True, DoFilter=True):
         '''

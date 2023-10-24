@@ -14,18 +14,23 @@ from pixell import enmap
 
 import lightcone
 import nbody
+import cmb
+
 
 def CheckSource(Source):
     if type(Source) not in [nbody.NBodySim, lightcone.LightCone]:
         raise Exception("Unsupported Source: need to create an nbodysim or lightcone instance")
 
     # TODO: Read off from pixell or healpix formats
-    if type(Source) == lightcone.LightCone and (CMBMap.shape[0] != Nmesh or CMBMap.shape[1] != Nmesh) and (RA==None or DEC==None):
-        raise Exception("Incomplete CMB Map: need to specify RA and DEC arrays")
+    #if type(Source) == lightcone.LightCone and (Map.shape[0] != Nmesh or Map.shape[1] != Nmesh) and (RA==None or DEC==None):
+    #    raise Exception("Incomplete CMB Map: need to specify RA and DEC arrays")
 
     # TODO: check to make sure Pk are computed
     if not (hasattr(Source, "Phh") or hasattr(Source, "Phh_kmu")) and type(Source) == nbody.NBodySim:
         raise Exception("Need to compute either the 1D or 2D power spectrum in nbodysim to run reconstruction")
+
+    if not hasattr(Source, "Pgg_kmu") and type(Source) == nbody.LightCone:
+        raise Exception("Need to compute fiducial Pge/Pgg spectra from model before running reconstruction")
 
     return
 
@@ -37,7 +42,16 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None):
     T_grid = np.zeros((Nmesh, Nmesh, Nmesh))
 
     if CMBMap.shape[0] != Nmesh or CMBMap.shape[1] != Nmesh:
-        CMBMap_interp = interp2d(RA, DEC, CMBMap)
+        if type(CMBMap) == cmb.CMBMap:
+            RA = np.linspace(Source.minRA, Source.maxRA, CMBMap.shape[0])
+            DEC = np.linspace(Source.minDEC, Source.maxDEC, CMBMap.shape[1])
+            CMBMap_interp = RectBivariateSpline(RA, DEC, CMBMap.to_array())
+        else:
+            print(np.array(CMBMap).shape)
+            RA = np.linspace(Source.minRA, Source.maxRA, np.array(CMBMap).shape[0])
+            DEC = np.linspace(Source.minDEC, Source.maxDEC, np.array(CMBMap).shape[1])
+            CMBMap_interp = RectBivariateSpline(RA, DEC, np.array(CMBMap))
+        
         RA_mesh = np.linspace(np.min(RA), np.max(RA), Nmesh)
         DEC_mesh = np.linspace(np.min(DEC), np.max(DEC), Nmesh)
         CMBMap = CMBMap_interp(RA_mesh, DEC_mesh)
@@ -120,8 +134,8 @@ def CreateFilters(Source, Iso=True):
     elif type(Source) == lightcone.LightCone:
 
         # Load Pgg and Pge from model
-        Pge = self.Pge_kmu
-        Pgg = self.Pgg_kmu
+        Pge = Source.Pge_kmu
+        Pgg = Source.Pgg_kmu
 
         def pge_pgg_filter(k, v):
             kk = sum(ki ** 2 for ki in k) # k^2 on the mesh
@@ -195,6 +209,7 @@ def RunReconstruction(Source, CMBMap, ClMap=None, RA=None, DEC=None, ComputePowe
     '''
     
     CheckSource(Source)
+    print(type(Source.halo_mesh))
     
     T_grid          = CreateTGrid(Source, CMBMap, RA=RA, DEC=DEC)
     filter_dict     = CreateFilters(Source, Iso=Iso)
@@ -203,6 +218,8 @@ def RunReconstruction(Source, CMBMap, ClMap=None, RA=None, DEC=None, ComputePowe
     noise_of_k      = CalculateNoise(Source, delta_e_times_T, filter_dict, ClMap=ClMap, RA=RA, DEC=DEC)
     vhat_of_k       = (noise_of_k)**-1 * delta_e_times_T.r2c()
     vhat            = vhat_of_k.c2r()
+
+    print(type(delta_e_field))
     
     if type(Source) == nbody.NBodySim and ComputePower and Iso:
         Pk_vv = FFTPower(vhat_of_k, mode='1d', dk=dk, kmax=0.3, kmin=0,).power
@@ -220,10 +237,13 @@ def RunReconstruction(Source, CMBMap, ClMap=None, RA=None, DEC=None, ComputePowe
     
     elif type(Source) == lightcone.LightCone and ComputePower:
         # TODO: add 3d pk mu
-        Pk_vv = ConvolvedFFTPower(vhat_of_k, mode='1d', poles=[0, 2], dk=dk, kmax=0.3, kmin=0,).power
-        Pk_vg = ConvolvedFFTPower(vhat_of_k, second=Source.halo_mesh, mode='1d', poles=[0, 2], dk=dk, kmax=0.3, kmin=0,).power
-        
-        return vhat, Pk_vv #TODO Pk_vq
+        #Pk_vv = ConvolvedFFTPower(vhat_of_k, poles=[0, 2], dk=dk, kmax=0.3, kmin=0,).power
+        #Pk_vg = ConvolvedFFTPower(vhat_of_k, second=Source.halo_mesh, poles=[0, 2], dk=dk, kmax=0.3, kmin=0,).power
+        Pk_vv = FFTPower(vhat_of_k, mode='1d', dk=dk, kmin=0, kmax=0.3)
+        Pk_vg = FFTPower(vhat_of_k, second=Source.halo_mesh, mode='1d', dk=dk, kmin=0, kmax=0.3)
+        Pk_gg = FFTPower(Source.halo_mesh, mode='1d', dk=dk, kmin=0, kmax=0.3)
+
+        return vhat, Pk_vg, Pk_vv, Pk_gg
     
     else:
         return vhat
