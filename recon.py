@@ -29,7 +29,7 @@ def CheckSource(Source):
     if not (hasattr(Source, "Phh") or hasattr(Source, "Phh_kmu")) and type(Source) == nbody.NBodySim:
         raise Exception("Need to compute either the 1D or 2D power spectrum in nbodysim to run reconstruction")
 
-    if not hasattr(Source, "Pgg_kmu") and type(Source) == nbody.LightCone:
+    if not hasattr(Source, "Pgg_kmu") and type(Source) == lightcone.LightCone:
         raise Exception("Need to compute fiducial Pge/Pgg spectra from model before running reconstruction")
 
     return
@@ -40,25 +40,36 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None):
     
     Nmesh = Source.Nmesh
     T_grid = np.zeros((Nmesh, Nmesh, Nmesh))
+    RA_mesh = np.linspace(Source.minRA, Source.maxRA, Nmesh)
+    DEC_mesh = np.linspace(Source.minDEC, Source.maxDEC, Nmesh)
 
     if CMBMap.shape[0] != Nmesh or CMBMap.shape[1] != Nmesh:
         if type(CMBMap) == cmb.CMBMap:
-            RA = np.linspace(Source.minRA, Source.maxRA, CMBMap.shape[0])
-            DEC = np.linspace(Source.minDEC, Source.maxDEC, CMBMap.shape[1])
-            CMBMap_interp = RectBivariateSpline(RA, DEC, CMBMap.to_array())
+            RAs = np.linspace(Source.minRA, Source.maxRA, CMBMap.shape[0])
+            DECs = np.linspace(Source.minDEC, Source.maxDEC, CMBMap.shape[1])
+            CMBMap_interp = RectBivariateSpline(RAs, DECs, CMBMap.to_array())
         else:
             print(np.array(CMBMap).shape)
-            RA = np.linspace(Source.minRA, Source.maxRA, np.array(CMBMap).shape[0])
-            DEC = np.linspace(Source.minDEC, Source.maxDEC, np.array(CMBMap).shape[1])
-            CMBMap_interp = RectBivariateSpline(RA, DEC, np.array(CMBMap))
+            RAs = np.linspace(Source.minRA, Source.maxRA, np.array(CMBMap).shape[0])
+            DECs = np.linspace(Source.minDEC, Source.maxDEC, np.array(CMBMap).shape[1])
+            CMBMap_interp = RectBivariateSpline(RAs, DECs, np.array(CMBMap))
         
-        RA_mesh = np.linspace(np.min(RA), np.max(RA), Nmesh)
-        DEC_mesh = np.linspace(np.min(DEC), np.max(DEC), Nmesh)
         CMBMap = CMBMap_interp(RA_mesh, DEC_mesh)
 
-    # Assumes the plane-parallel approximation
-    # Copies over the CMB map on a grid
-    for i in range(Nmesh): T_grid[i] = CMBMap
+    if isinstance(Source, nbody.NBodySim):
+        # Assumes the plane-parallel approximation
+        # Copies over the CMB map on a grid
+        for i in range(Nmesh): T_grid[i] = CMBMap
+
+    else:
+        # for lightcone, the picture is a bit more complicated
+        # scale the angles as function of los distance
+        # use RectGridInterpolator to set fill_value to 0. outside RA/DEC range
+        # TODO: use regular grid interp everywhere
+        CMBMap_interp = RegularGridInterpolator((RA, DEC), np.array(CMBMap), bounds_error=False, fill_value=0.)
+        zs = np.linspace(Source.Zmin, Source.Zmax, Nmesh)
+        chis = Source.comoving_distance(zs)
+        for i in range(Nmesh): T_grid[i] = CMBMap_interp((RA_mesh * chis[-1]/chis[i], DEC_mesh * chis[-1]/chis[i]))
     
     return T_grid
 
