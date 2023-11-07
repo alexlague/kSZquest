@@ -4,11 +4,15 @@ from a CMB map and a halo density field
 '''
 
 import numpy as np
-from scipy.interpolate import interp1d, RectBivariateSpline
+from scipy.interpolate import interp1d, RectBivariateSpline, RegularGridInterpolator
 from scipy import constants
 
 import nbodykit
 from nbodykit.lab import *
+try:
+    from nbodykit.algorithms.convpower.catalog import FKPVelocityCatalog
+except:
+    pass
 
 from pixell import enmap
 
@@ -40,23 +44,28 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None):
     
     Nmesh = Source.Nmesh
     T_grid = np.zeros((Nmesh, Nmesh, Nmesh))
-    RA_mesh = np.linspace(Source.minRA, Source.maxRA, Nmesh)
-    DEC_mesh = np.linspace(Source.minDEC, Source.maxDEC, Nmesh)
-
-    if CMBMap.shape[0] != Nmesh or CMBMap.shape[1] != Nmesh:
-        if type(CMBMap) == cmb.CMBMap:
-            RAs = np.linspace(Source.minRA, Source.maxRA, CMBMap.shape[0])
-            DECs = np.linspace(Source.minDEC, Source.maxDEC, CMBMap.shape[1])
-            CMBMap_interp = RectBivariateSpline(RAs, DECs, CMBMap.to_array())
-        else:
-            print(np.array(CMBMap).shape)
-            RAs = np.linspace(Source.minRA, Source.maxRA, np.array(CMBMap).shape[0])
-            DECs = np.linspace(Source.minDEC, Source.maxDEC, np.array(CMBMap).shape[1])
-            CMBMap_interp = RectBivariateSpline(RAs, DECs, np.array(CMBMap))
-        
-        CMBMap = CMBMap_interp(RA_mesh, DEC_mesh)
-
+    
+    if hasattr(Source, "minRA") is True:
+        RA_mesh = np.linspace(Source.minRA, Source.maxRA, Nmesh)
+        DEC_mesh = np.linspace(Source.minDEC, Source.maxDEC, Nmesh)
+    
     if isinstance(Source, nbody.NBodySim):
+        if (CMBMap.shape[0] != Nmesh or CMBMap.shape[1] != Nmesh) and hasattr(Source, "minRA") is True:
+            if type(CMBMap) == cmb.CMBMap:
+                RAs = np.linspace(Source.minRA, Source.maxRA, CMBMap.shape[0])
+                DECs = np.linspace(Source.minDEC, Source.maxDEC, CMBMap.shape[1])
+                CMBMap_interp = RectBivariateSpline(RAs, DECs, CMBMap.to_array())
+            else:
+                print(np.array(CMBMap).shape)
+                RAs = np.linspace(Source.minRA, Source.maxRA, np.array(CMBMap).shape[0])
+                DECs = np.linspace(Source.minDEC, Source.maxDEC, np.array(CMBMap).shape[1])
+                CMBMap_interp = RectBivariateSpline(RAs, DECs, np.array(CMBMap))
+        
+            CMBMap = CMBMap_interp(RA_mesh, DEC_mesh)
+    
+        elif (CMBMap.shape[0] != Nmesh or CMBMap.shape[1] != Nmesh) and hasattr(Source, "minRA") is False:
+            raise Exception("The shape of the CMB map does not match the shape of the density grid; specify RA and DEC range")
+
         # Assumes the plane-parallel approximation
         # Copies over the CMB map on a grid
         for i in range(Nmesh): T_grid[i] = CMBMap
@@ -66,11 +75,15 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None):
         # scale the angles as function of los distance
         # use RectGridInterpolator to set fill_value to 0. outside RA/DEC range
         # TODO: use regular grid interp everywhere
-        CMBMap_interp = RegularGridInterpolator((RA, DEC), np.array(CMBMap), bounds_error=False, fill_value=0.)
-        zs = np.linspace(Source.Zmin, Source.Zmax, Nmesh)
-        chis = Source.comoving_distance(zs)
-        for i in range(Nmesh): T_grid[i] = CMBMap_interp((RA_mesh * chis[-1]/chis[i], DEC_mesh * chis[-1]/chis[i]))
-    
+        print(CMBMap.shape)
+        RAs = np.linspace(Source.minRA, Source.maxRA, CMBMap.shape[0])
+        DECs = np.linspace(Source.minDEC,Source.maxDEC, CMBMap.shape[1])
+        CMBMap_interp = RegularGridInterpolator((RAs, DECs), CMBMap, bounds_error=False, fill_value=0.)
+        zs = np.linspace(Source.minZ, Source.maxZ, Nmesh)
+        chis = Source.cosmo.comoving_distance(zs)
+        #for i in range(Nmesh): T_grid[i] = CMBMap_interp((RA_mesh * chis[-1]/chis[i], DEC_mesh * chis[-1]/chis[i]))
+        for i in range(Nmesh): T_grid[i] = CMBMap_interp((RA_mesh, DEC_mesh))
+
     return T_grid
 
 def CreateFilters(Source, Iso=True):
@@ -212,6 +225,16 @@ def CalculateNoise(Source, Field, FilterDictionary, ClMap=None, RA=None, DEC=Non
         noise_of_k = f_1_of_x.r2c()
         
     return noise_of_k
+
+def PaintedVelocities(Source, vhat):
+    '''
+    '''
+    
+    positions = np.array(Source['Position'])
+    grid = np.linspace(np.min(positions), np.max(positions), Source.Nmesh)
+    velocity_interp = RegularGridInterpolator((grid, grid, grid), vhat)
+    
+    return velocity_interp(positions)
 
 
 def RunReconstruction(Source, CMBMap, ClMap=None, RA=None, DEC=None, ComputePower=True, dk=5e-3, Iso=True, Nmu=5):

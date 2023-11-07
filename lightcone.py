@@ -152,7 +152,7 @@ class LightCone:
         return
     
     def CalculateMultipoles(self, poles=[0, 2, 4], kmin=0.0, kmax=0.3, dk=5e-3):
-        self.r = ConvolvedFFTPower(self.halo_mesh, poles=poles, dk=dk, kmin=kmin).poles
+        self.r = ConvolvedFFTPower(self.halo_mesh, poles=poles, dk=dk, kmin=kmin, kmax=kmax).poles
         return
 
     def GetPowerSpectraModel(self):
@@ -166,7 +166,7 @@ class LightCone:
         ngals = self.nofz(zs) * self.cosmo.h**3 # to 1/Mpc^3
 
         if hasattr(self, "bg"):
-            bgs = self.bg * np.ones(len(zs)) * self.cosmo.h**3 # TODO moe h^3 correction to bg
+            bgs = self.bg * np.ones(len(zs)) #* self.cosmo.h**3 # TODO moe h^3 correction to bg
         else:
             bgs = None
         
