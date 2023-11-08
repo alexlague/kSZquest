@@ -274,10 +274,11 @@ def RunReconstruction(Source, CMBMap, ClMap=None, RA=None, DEC=None, ComputePowe
         #Pk_vv = ConvolvedFFTPower(vhat_of_k, poles=[0, 2], dk=dk, kmax=0.3, kmin=0,).power
         #Pk_vg = ConvolvedFFTPower(vhat_of_k, second=Source.halo_mesh, poles=[0, 2], dk=dk, kmax=0.3, kmin=0,).power
         Pk_vv = FFTPower(vhat_of_k, mode='1d', dk=dk, kmin=0, kmax=0.3)
-        Pk_vg = FFTPower(vhat_of_k, second=Source.halo_mesh, mode='1d', dk=dk, kmin=0, kmax=0.3)
-        Pk_gg = FFTPower(Source.halo_mesh, mode='1d', dk=dk, kmin=0, kmax=0.3)
+        Pk_vq = FFTPower(vhat_of_k, second=Source.halo_momentum_mesh, mode='1d', dk=dk, kmin=0, kmax=0.3)
+        Pk_qq = FFTPower(Source.halo_momentum_mesh, mode='1d', dk=dk, kmin=0, kmax=0.3)
+        #Pk_gg = FFTPower(Source.halo_mesh, mode='1d', dk=dk, kmin=0, kmax=0.3)
 
-        return vhat, Pk_vg, Pk_vv, Pk_gg
+        return vhat, Pk_vq, Pk_vv, Pk_qq
     
     else:
         return vhat

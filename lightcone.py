@@ -39,7 +39,10 @@ class LightCone:
         
         return
 
-    def LoadGalaxies(self, SimDir, SimType, GenerateRand=False, zmin=0.0, zmax=5.0, alpha=0.1):
+    def LoadGalaxies(self, SimDir, SimType, GenerateRand=False, z_min=0.0, z_max=5.0, ra_min=-180, ra_max=180, dec_min=-90, dec_max=90, alpha=0.1):
+        '''
+        Implemented SimTypes: Magneticum, Sehgal
+        '''
         if SimType=='Magneticum':
             halos = np.loadtxt(SimDir)
             flag = halos[:,17]
@@ -48,12 +51,44 @@ class LightCone:
             ypix     = halos[:,2]
             z_obs    = halos[:,7]
 
-            ind = (z_obs <= zmax) & (z_obs >= zmin)
+            ras = (xpix[ind]-.5) * 35
+            decs = (ypix[ind]-.5) * 35
+            
+            ind = (z_obs <= z_max) & (z_obs >= z_min) & (ras >= ra_min) & (ras <= ra_max) & (decs >= dec_min) & (decs <= dec_max) 
             
             self.data = {}
-            self.data['ra'] = (xpix[ind]-.5) * 35
-            self.data['dec'] = (ypix[ind]-.5) * 35
+            self.data['ra'] = ras[ind]
+            self.data['dec'] = decs[ind]
             self.data['z'] = z_obs[ind]
+
+            
+        elif SimType == 'Sehgal':
+            halos = np.loadtxt(SimDir)
+            z_true = halos[:,0]
+            ras = halos[:,1]
+            decs = halos[:,2]
+            
+            ind = (z_true <= z_max) & (z_true >= z_min) & (ras >= ra_min) & (ras <= ra_max) & (decs >= dec_min) & (decs <= dec_max)
+            
+            pos = halos[:,3:6][ind]
+            vel = halos[:,6:9][ind]
+            
+            # LOS velocity
+            n_hat = (pos.T/np.linalg.norm(pos, axis=1)).T
+            vel_los = np.array([np.dot(vel[i], n_hat[i]) for i in range(len(vel))])
+            
+            z_interp = np.linspace(z_min, z_max, 1000)
+            z_of_chi = InterpolatedUnivariateSpline(self.cosmo.comoving_distance(z_interp)/self.cosmo.h, z_interp)
+            aH = 1/(1+z_true[ind]) * self.cosmo.hubble_function(z_true[ind])
+            chi_obs = self.cosmo.comoving_distance(z_true[ind]) / self.cosmo.h + vel_los / 3e5 / aH
+            z_obs = z_of_chi(chi_obs)
+
+            self.data = {}
+            self.data['ra'] = ras[ind]
+            self.data['dec'] = decs[ind]
+            self.data['z'] = z_obs # selection already applied
+            self.data['Vz'] = vel_los
+            
         else:
             raise Exception("Simulation type not implemented")
         
@@ -91,7 +126,13 @@ class LightCone:
         # TODO: function in case FKP/completeness included in data
         self.fkp_catalog['data/FKPWeight'] = 1.0 / (1 + self.fkp_catalog['data/NZ'] * 1e4)
         self.fkp_catalog['randoms/FKPWeight'] = 1.0 / (1 + self.fkp_catalog['randoms/NZ'] * 1e4)
-        
+
+        # Create a velocity catalog (without randoms)
+        if 'Vz' in self.data.keys():
+            self.fkp_velocity_catalog = FKPVelocityCatalog(self.data)
+            self.fkp_velocity_catalog['data/NZ'] = self.nofz(self.data['z'])
+            self.fkp_velocity_catalog['data/FKPWeight'] = self.data['Vz'] #/ () # TODO: Implement Howlett's weights
+
         return
 
     def LoadCMBMap(self, SimDir, SimType):
@@ -148,7 +189,7 @@ class LightCone:
     def PaintMesh(self):
         # TODO: include completeness weights
         self.halo_mesh = self.fkp_catalog.to_mesh(Nmesh=self.Nmesh, nbar='NZ', fkp_weight='FKPWeight')
-        
+        self.halo_momentum_mesh = self.fkp_velocity_catalog.to_mesh(Nmesh=self.Nmesh, nbar='NZ', fkp_weight='FKPWeight')
         return
     
     def CalculateMultipoles(self, poles=[0, 2, 4], kmin=0.0, kmax=0.3, dk=5e-3):
