@@ -9,6 +9,7 @@ from scipy.optimize import minimize
 
 import nbodykit
 from nbodykit.lab import *
+from nbodykit.algorithms.convpower.catalog import FKPVelocityCatalog
 
 from hmvec.ksz import get_ksz_auto_squeezed
 
@@ -55,7 +56,7 @@ class LightCone:
             decs = (ypix[ind]-.5) * 35
             
             ind = (z_obs <= z_max) & (z_obs >= z_min) & (ras >= ra_min) & (ras <= ra_max) & (decs >= dec_min) & (decs <= dec_max) 
-            
+            ind = np.sort(ind)
             self.data = {}
             self.data['ra'] = ras[ind]
             self.data['dec'] = decs[ind]
@@ -69,7 +70,7 @@ class LightCone:
             decs = halos[:,2]
             
             ind = (z_true <= z_max) & (z_true >= z_min) & (ras >= ra_min) & (ras <= ra_max) & (decs >= dec_min) & (decs <= dec_max)
-            
+            ind = np.sort(ind)
             pos = halos[:,3:6][ind]
             vel = halos[:,6:9][ind]
             
@@ -104,6 +105,7 @@ class LightCone:
 
         # Include Cartesian coords
         self.data['Position'] = transform.SkyToCartesian(self.data['ra'], self.data['dec'], self.data['z'], cosmo=self.cosmo)
+        self.BoxSize = np.max(np.array(self.data['Position'])) - np.min(np.array(self.data['Position']))
         
         if GenerateRand:
             # Calculate nofz from data
@@ -128,10 +130,9 @@ class LightCone:
         self.fkp_catalog['randoms/FKPWeight'] = 1.0 / (1 + self.fkp_catalog['randoms/NZ'] * 1e4)
 
         # Create a velocity catalog (without randoms)
-        if 'Vz' in self.data.keys():
-            self.fkp_velocity_catalog = FKPVelocityCatalog(self.data)
-            self.fkp_velocity_catalog['data/NZ'] = self.nofz(self.data['z'])
-            self.fkp_velocity_catalog['data/FKPWeight'] = self.data['Vz'] #/ () # TODO: Implement Howlett's weights
+        self.fkp_velocity_catalog = FKPVelocityCatalog(self.data)
+        self.fkp_velocity_catalog['data/NZ'] = self.nofz(self.data['z'])
+        self.fkp_velocity_catalog['data/FKPWeight'] = self.data['Vz'] #/ () # TODO: Implement Howlett's weights
 
         return
 
@@ -146,7 +147,7 @@ class LightCone:
 
     def GenerateRandoms(self, alpha=0.1):
         
-        rand = RandomCatalog(int(2*len(self.data)/alpha))
+        rand = RandomCatalog(int(4*len(self.data)/alpha))
         rand['z']   = rand.rng.uniform(low=self.minZ, high=self.maxZ)
         rand['ra']  = rand.rng.uniform(low=self.minRA, high=self.maxRA)
         rand['dec'] = rand.rng.uniform(low=self.minDEC, high=self.maxDEC)
@@ -154,7 +155,7 @@ class LightCone:
         # Subselect z to match nofz from data
         h_indexes = np.arange(len(rand['z']))
         hzs = rand['z']
-        dist = self.nofz(hzs) # distribution
+        dist = abs(self.nofz(hzs)) # distribution
         dist /= np.sum(dist) # normalized
         Nrand =  self.data.csize / alpha
 
@@ -188,8 +189,8 @@ class LightCone:
     
     def PaintMesh(self):
         # TODO: include completeness weights
-        self.halo_mesh = self.fkp_catalog.to_mesh(Nmesh=self.Nmesh, nbar='NZ', fkp_weight='FKPWeight')
-        self.halo_momentum_mesh = self.fkp_velocity_catalog.to_mesh(Nmesh=self.Nmesh, nbar='NZ', fkp_weight='FKPWeight')
+        self.halo_mesh = self.fkp_catalog.to_mesh(Nmesh=self.Nmesh, nbar='NZ', fkp_weight='FKPWeight', BoxSize=self.BoxSize)
+        self.halo_momentum_mesh = self.fkp_velocity_catalog.to_mesh(Nmesh=self.Nmesh, nbar='NZ', fkp_weight='FKPWeight', BoxSize=self.BoxSize)
         return
     
     def CalculateMultipoles(self, poles=[0, 2, 4], kmin=0.0, kmax=0.3, dk=5e-3):
