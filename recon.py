@@ -81,7 +81,7 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None):
         CMBMap_interp = RegularGridInterpolator((RAs, DECs), CMBMap, bounds_error=False, fill_value=0.)
         zs = np.linspace(Source.minZ, Source.maxZ, Nmesh)
         chis = Source.cosmo.comoving_distance(zs)
-        for i in range(Nmesh): T_grid[i] = CMBMap_interp((RA_mesh * chis[-1]/chis[i], DEC_mesh * chis[-1]/chis[i]))
+        for i in range(Nmesh): T_grid[-i] = CMBMap_interp((RA_mesh * chis[-1]/chis[i], DEC_mesh * chis[-1]/chis[i]))
         #for i in range(Nmesh): T_grid[i] = CMBMap_interp((RA_mesh, DEC_mesh))
 
     return T_grid
@@ -160,13 +160,14 @@ def CreateFilters(Source, Iso=True):
         # Load Pgg and Pge from model
         Pge = Source.Pge_kmu
         Pgg = Source.Pgg_kmu
+        h = Source.cosmo.h
 
         def pge_pgg_filter(k, v):
             kk = sum(ki ** 2 for ki in k) # k^2 on the mesh
             kk[kk == 0] = 1
             mu = k[2] / kk
-            num = Pge(np.sqrt(kk), mu)
-            den = Pgg(np.sqrt(kk), mu)
+            num = Pge(np.sqrt(kk)/h, mu)*h**3
+            den = Pgg(np.sqrt(kk)/h, mu)*h**3
             fil = num / den
             fil[np.isnan(fil)] = 1.
             return v * fil
@@ -175,8 +176,8 @@ def CreateFilters(Source, Iso=True):
             kk = sum(ki ** 2 for ki in k) # k^2 on the mesh
             kk[kk == 0] = 1
             mu = k[2] / kk
-            num = Pge(np.sqrt(kk), mu)
-            den = Pgg(np.sqrt(kk), mu)
+            num = Pge(np.sqrt(kk)/h, mu)*h**3
+            den = Pgg(np.sqrt(kk)/h, mu)*h**3
             fil = num**2 / den
             fil[np.isnan(fil)] = 1.
             return v * fil

@@ -105,7 +105,9 @@ class LightCone:
 
         # Include Cartesian coords
         self.data['Position'] = transform.SkyToCartesian(self.data['ra'], self.data['dec'], self.data['z'], cosmo=self.cosmo)
-        self.BoxSize = np.max(np.array(self.data['Position'])) - np.min(np.array(self.data['Position']))
+        box = np.max(np.array(self.data['Position'])) - np.min(np.array(self.data['Position']))
+        print(box)
+        self.BoxSize = box
         
         if GenerateRand:
             # Calculate nofz from data
@@ -212,8 +214,9 @@ class LightCone:
         else:
             bgs = None
         
-        model = get_ksz_auto_squeezed(ells=ls, volume_gpc3=vol, zs=zs, ngals_mpc3=ngals, params=self.CosmoParams, template=True, rsd=True, bgs=bgs)
-        
+        #model = get_ksz_auto_squeezed(ells=ls, volume_gpc3=vol, zs=zs, ngals_mpc3=ngals, params=self.CosmoParams, template=True, rsd=True, bgs=bgs)
+        model = get_ksz_auto_squeezed(ells=ls, volume_gpc3=vol, zs=zs, ngals_mpc3=None, params=self.CosmoParams, template=True, rsd=True, bgs=bgs)
+       
         self.model = model[2]
 
         print(self.model.keys())
