@@ -81,7 +81,7 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None):
         CMBMap_interp = RegularGridInterpolator((RAs, DECs), CMBMap, bounds_error=False, fill_value=0.)
         zs = np.linspace(Source.minZ, Source.maxZ, Nmesh)
         chis = Source.cosmo.comoving_distance(zs)
-        for i in range(Nmesh): T_grid[-i] = CMBMap_interp((RA_mesh * chis[-1]/chis[i], DEC_mesh * chis[-1]/chis[i]))
+        for i in range(Nmesh): T_grid[i] = CMBMap_interp((RA_mesh * chis[-1]/chis[i], DEC_mesh * chis[-1]/chis[i]))
         #for i in range(Nmesh): T_grid[i] = CMBMap_interp((RA_mesh, DEC_mesh))
 
     return T_grid

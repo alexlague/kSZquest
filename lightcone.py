@@ -56,7 +56,6 @@ class LightCone:
             decs = (ypix[ind]-.5) * 35
             
             ind = (z_obs <= z_max) & (z_obs >= z_min) & (ras >= ra_min) & (ras <= ra_max) & (decs >= dec_min) & (decs <= dec_max) 
-            ind = np.sort(ind)
             self.data = {}
             self.data['ra'] = ras[ind]
             self.data['dec'] = decs[ind]
@@ -70,7 +69,6 @@ class LightCone:
             decs = halos[:,2]
             
             ind = (z_true <= z_max) & (z_true >= z_min) & (ras >= ra_min) & (ras <= ra_max) & (decs >= dec_min) & (decs <= dec_max)
-            ind = np.sort(ind)
             pos = halos[:,3:6][ind]
             vel = halos[:,6:9][ind]
             
@@ -79,7 +77,7 @@ class LightCone:
             vel_los = np.array([np.dot(vel[i], n_hat[i]) for i in range(len(vel))])
             
             z_interp = np.linspace(z_min, z_max, 1000)
-            z_of_chi = InterpolatedUnivariateSpline(self.cosmo.comoving_distance(z_interp)/self.cosmo.h, z_interp)
+            z_of_chi = InterpolatedUnivariateSpline(self.cosmo.comoving_distance(z_interp)/self.cosmo.h, z_interp) # TODO: Fix error in RSD calc
             aH = 1/(1+z_true[ind]) * self.cosmo.hubble_function(z_true[ind])
             chi_obs = self.cosmo.comoving_distance(z_true[ind]) / self.cosmo.h + vel_los / 3e5 / aH
             z_obs = z_of_chi(chi_obs)
@@ -87,9 +85,98 @@ class LightCone:
             self.data = {}
             self.data['ra'] = ras[ind]
             self.data['dec'] = decs[ind]
-            self.data['z'] = z_obs # selection already applied
-            self.data['Vz'] = vel_los
+            self.data['z'] = z_true[ind] # selection already applied
+            self.data['Vz'] = vel[:,2] #vel_los
+            #self.data['V'] = vel
+
+        elif SimType == 'WebSky':
+            #from astropy.cosmology import FlatLambdaCDM, z_at_value
+            #import astropy.units as u
+
+            #z_at_value = z_at_value
+            #u = u
+            #astropy_cosmo = FlatLambdaCDM(H0=self.websky_cosmo['h']*100, Om0=self.websky_cosmo['Omega_M'])
+
+            halo_catalogue_file = SimDir# + 'halos-light.pksc'
+            # load catalogue header
+            Nhalo            = np.fromfile(halo_catalogue_file, dtype=np.int32, count=1)[0]
+            #if not(Nmax is None):
+            #    Nhalo = int(Nmax)
+            RTHMAXin         = np.fromfile(halo_catalogue_file, dtype=np.float32, count=1)
+            redshiftbox      = np.fromfile(halo_catalogue_file, dtype=np.float32, count=1)
+            print("\nNumber of Halos in full catalogue %d \n " % Nhalo)
+
+            nfloats_perhalo = 10 #4 instad of 10 since using light
+            npkdata         = nfloats_perhalo*Nhalo
+            print(npkdata)
+
+            # load catalogue data
+            halodata        = np.fromfile(halo_catalogue_file, dtype=np.float32, count=npkdata)
+            halodata        = np.reshape(halodata,(Nhalo,nfloats_perhalo))
+
+            # change from R_th to halo mass (M_200,M)
+            rho_mean = 2.775e11 * self.cosmo.Om0 * self.cosmo.h**2
+            halodata[:,6] = 4.0/3*np.pi * halodata[:,6]**3 * rho_mean        
+        
+            # cut mass range
+            #if mmin > 0 or mmax < np.inf:
+            #    dm = (halodata[:,6] > mmin) & (halodata[:,6] < mmax) 
+            #    halodata = halodata[dm]
+
+            # cut redshift range
+            if z_min > 0 or z_max < np.inf:
+                #self.import_astropy()
+                rofzmin = self.cosmo.comoving_distance(zmin)
+                rofzmax = self.cosmo.comoving_distance(zmax)
+
+                rpp =  np.sqrt( np.sum(halodata[:,:3]**2, axis=1))
+
+                dm = (rpp > rofzmin) & (rpp < rofzmax) 
+                halodata = halodata[dm]
+
+            # cut distance range
+            #if rmin > 0 or rmax < np.inf:
+            #    rpp =  np.sqrt(np.sum(halodata[:,:3]**2, axis=1))
+
+           #     dm = (rpp > rmin) & (rpp < rmax) 
+           #     halodata = halodata[dm]
+
+
+            # get halo redshifts and crop all non practical information
+            #self.import_astropy()
+
+            # set up comoving distance to redshift interpolation table
+            rpp =  np.sqrt( np.sum(halodata[:,:3]**2, axis=1))
+
+            z_interp = np.linspace(z_min, z_max, 1000)
+            z_of_chi = InterpolatedUnivariateSpline(self.cosmo.comoving_distance(z_interp)/self.cosmo.h, z_interp) 
+            #zminh = self.z_at_value(self.astropy_cosmo.comoving_distance, rpp.min()*self.u.Mpc)
+            #zmaxh = self.z_at_value(self.astropy_cosmo.comoving_distance, rpp.max()*self.u.Mpc)
+            zminh = z_of_chi(rpp.min())
+            zmaxh = z_of_chi(rpp.max())
+            zgrid = np.linspace(zminh, zmaxh, 10000)
+            dgrid = self.cosmo.comoving_distance(zgrid)
             
+            # first replace 7th column with redshift
+            halodata[:,7] = np.interp(rpp, dgrid, zgrid)
+            
+            # crop un-practical halo information
+            halodata = halodata[:,:8]
+            
+            Nhalo = halodata.shape[0] 
+            Nfloat_perhalo = halodata.shape[1]
+
+            # write out halo catalogue information
+            #if self.verbose: 
+            print("Halo catalogue after cuts: np.array((Nhalo=%d, floats_per_halo=%d)), containing:\n" % (Nhalo, Nfloat_perhalo))
+            print("0:x [Mpc], 1:y [Mpc], 2:z [Mpc], 3:vx [km/s], 4:vy [km/s], 5:vz [km/s],\n 6:M [M_sun (M_200,m)], 7:redshift(chi_halo) \n")
+            #else:
+            #    print("0:x [Mpc], 1:y [Mpc], 2:z [Mpc], 3:vx [km/s], 4:vy [km/s], 5:vz [km/s],\n"+ 
+            #          "6:M [M_sun (M_200,m)], 7:x_lag [Mpc], 8:y_lag [Mpc], 9:z_lag [Mpc]\n")
+
+            #self.data['z'] = halodata[:,7]
+            self.data['ra'], self.data['dec'], self.data['z'] = transform.CartesianToSky(halodata[:, 0:3])
+        
         else:
             raise Exception("Simulation type not implemented")
         
