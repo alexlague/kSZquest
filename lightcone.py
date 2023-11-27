@@ -96,8 +96,42 @@ class LightCone:
             #z_at_value = z_at_value
             #u = u
             #astropy_cosmo = FlatLambdaCDM(H0=self.websky_cosmo['h']*100, Om0=self.websky_cosmo['Omega_M'])
+            omegab = 0.049
+            omegac = 0.261
+            omegam = omegab + omegac
+            h      = 0.68
+            ns     = 0.965
+            sigma8 = 0.81
+            cosmo = cosmology.Cosmology(h=h, Omega0_b=omegab, Omega0_cdm=omegac)
+            cosmo = cosmo.match(sigma8=sigma8)
 
             halo_catalogue_file = SimDir# + 'halos-light.pksc'
+            rho = 2.775e11*omegam*h**2 # Msun/Mpc^3
+            
+            with open(SimDir) as f:
+                N=np.fromfile(f,count=3,dtype=np.int32)[0]
+            
+                # only take first five entries for testing (there are ~8e8 halos total...)
+                # comment the following line to read in all halos
+                N = int(5e8)
+                
+                catalog=np.fromfile(f,count=N*10,dtype=np.float32)
+            
+            catalog=np.reshape(catalog,(N,10))
+            
+            x  = catalog[:,0];  y = catalog[:,1];  z = catalog[:,2] # Mpc (comoving)
+            vx = catalog[:,3]; vy = catalog[:,4]; vz = catalog[:,5] # km/sec
+            R  = catalog[:,6] # Mpc 
+         
+            # convert to mass, comoving distance, radial velocity, redshfit, RA and DEc
+            M200m    = 4*np.pi/3.*rho*R**3        # this is M200m (mean density 200 times mean) in Msun 
+            chi      = np.sqrt(x**2+y**2+z**2)    # Mpc
+            vrad     = (x*vx + y*vy + z*vz) / chi # km/sec
+            #z_interp = np.linspace(z_min, z_max, 1000)
+            #z_of_chi = InterpolatedUnivariateSpline(self.cosmo.comoving_distance(z_interp)/self.cosmo.h, z_interp)
+            #redshift = z_of_chi(chi)
+
+            '''
             # load catalogue header
             Nhalo            = np.fromfile(halo_catalogue_file, dtype=np.int32, count=1)[0]
             #if not(Nmax is None):
@@ -106,14 +140,14 @@ class LightCone:
             redshiftbox      = np.fromfile(halo_catalogue_file, dtype=np.float32, count=1)
             print("\nNumber of Halos in full catalogue %d \n " % Nhalo)
 
-            nfloats_perhalo = 10 #4 instad of 10 since using light
+            nfloats_perhalo = 10
             npkdata         = nfloats_perhalo*Nhalo
             print(npkdata)
 
             # load catalogue data
             halodata        = np.fromfile(halo_catalogue_file, dtype=np.float32, count=npkdata)
-            halodata        = np.reshape(halodata,(Nhalo,nfloats_perhalo))
-
+            halodata        = np.reshape(halodata,(Nhalo, nfloats_perhalo))
+            
             # change from R_th to halo mass (M_200,M)
             rho_mean = 2.775e11 * self.cosmo.Om0 * self.cosmo.h**2
             halodata[:,6] = 4.0/3*np.pi * halodata[:,6]**3 * rho_mean        
@@ -126,8 +160,8 @@ class LightCone:
             # cut redshift range
             if z_min > 0 or z_max < np.inf:
                 #self.import_astropy()
-                rofzmin = self.cosmo.comoving_distance(zmin)
-                rofzmax = self.cosmo.comoving_distance(zmax)
+                rofzmin = self.cosmo.comoving_distance(z_min)
+                rofzmax = self.cosmo.comoving_distance(z_max)
 
                 rpp =  np.sqrt( np.sum(halodata[:,:3]**2, axis=1))
 
@@ -166,6 +200,7 @@ class LightCone:
             Nhalo = halodata.shape[0] 
             Nfloat_perhalo = halodata.shape[1]
 
+            np.save('/home/r/rbond/alague/scratch/ksz-pipeline/ksz-analysis/quadratic_estimator/development_code/reduced-z-websky-catalog.npy', halodata)
             # write out halo catalogue information
             #if self.verbose: 
             print("Halo catalogue after cuts: np.array((Nhalo=%d, floats_per_halo=%d)), containing:\n" % (Nhalo, Nfloat_perhalo))
@@ -173,10 +208,19 @@ class LightCone:
             #else:
             #    print("0:x [Mpc], 1:y [Mpc], 2:z [Mpc], 3:vx [km/s], 4:vy [km/s], 5:vz [km/s],\n"+ 
             #          "6:M [M_sun (M_200,m)], 7:x_lag [Mpc], 8:y_lag [Mpc], 9:z_lag [Mpc]\n")
-
+            '''
             #self.data['z'] = halodata[:,7]
-            self.data['ra'], self.data['dec'], self.data['z'] = transform.CartesianToSky(halodata[:, 0:3])
-        
+            self.data = {}
+
+            ra, dec, z = transform.CartesianToSky(catalog[:, 0:3], self.cosmo, velocity=catalog[:, 3:6])
+            
+            ind = (z >= z_min) & (z <= z_max) & (ra >= ra_min) & (ra <= ra_max) & (dec >= dec_min) & (dec <= dec_max)
+            self.data['ra'] = np.array(ra)[ind]
+            self.data['dec'] = np.array(dec)[ind]
+            self.data['z'] = np.array(z)[ind]
+            self.data['Vz'] = vrad[ind]
+            
+            print(self.data['z'].shape)
         else:
             raise Exception("Simulation type not implemented")
         
