@@ -17,9 +17,20 @@ sys.path.append('/home/r/rbond/alague/scratch/ksz-pipeline/abacus_data/AbacusCos
 from AbacusCosmos import Halos
 
 class NBodySim:
+    '''
+    Class which holds data from an N-Body (DM Only) assumed to be at a fixed z (not a lightcone)
     
+    Inputs:
+    Redshift: (float) redshift at which the snapshot is evaluated
+    BoxSize: (float) length of one side of the box in Mpc/h
+    CosmoParams: dictionary containing the cosmological parameters used in the simulation (default Planck15)
+    LOS: list of floats representing the line-of-sight unit vector (default z-axis) 
+    '''
 
     def __init__(self, Redshift, BoxSize, CosmoParams=None, LOS=[0, 0, 1]):
+        '''
+        Builds the NBody class object
+        '''
         if CosmoParams == None:
             print("No cosmological parameters specified: assuming Planck15")
             self.cosmo = cosmology.Planck15
@@ -34,6 +45,9 @@ class NBodySim:
     
 
     def _check_mesh_(self):
+        '''
+        Checks if mesh already exists, and if not, ensures Nmesh was supplied
+        '''
         if hasattr(self, "particle_momentum_mesh")==False and Nmesh==None:
             raise Exception("Need to run mesh painting first, please specify Nmesh")
         elif hasattr(self, "particle_momentum_mesh")==False and Nmesh!=None:
@@ -44,6 +58,14 @@ class NBodySim:
     
     def LoadData(self, SimDir, SimType, DownSample=100, HaloParticles=True, FieldParticles=True):
         '''
+        Wrapper function to load N-body simulation data from file
+        
+        Inputs
+        SimDir: (str) directory where the datafile is located
+        SimType: (str) type of simulation (right now only "Abacus" is valid)
+        DownSample: (float) downsample factor for the particles (if 100, only 1% of particles are loaded)
+        HaloParticles: (bool) if True particles contained in halos are loaded
+        FieldParticles: (bool) if True particles outside of halos are loaded
         '''
 
         speed_of_light = 299792.458 # km/s
@@ -144,7 +166,8 @@ class NBodySim:
     
     def to_LightCone(zBins, NzBins, nbar):
         '''
-        Transform the cubic box to a lightcone with a mask and N(z)
+        DEPRECATED
+        Transforms the cubic box to a lightcone with a mask and N(z)
         '''
         
         nz_interp = interp1d(zBins, Nzbins, bounds_error=False, fill_value=0., kind='cubic')
@@ -161,6 +184,10 @@ class NBodySim:
 
     def PaintBoxMeshes(self, Nmesh, RSD=False):
         '''
+        Creates a nbodykit mesh object from the particle and halo catalogs
+
+        Inputs
+        Nmesh
         '''
         self.Nmesh = Nmesh
         

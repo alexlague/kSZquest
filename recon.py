@@ -231,14 +231,28 @@ def PaintedVelocities(Source, vhat):
     '''
     '''
     
-    positions = np.array(Source['Position'])
-    grid = np.linspace(np.min(positions), np.max(positions), Source.Nmesh)
-    velocity_interp = RegularGridInterpolator((grid, grid, grid), vhat)
+    positions = np.array(Source.data['Position'])
+    xgrid = np.linspace(np.min(positions[:,0]), np.max(positions[:,0]), Source.Nmesh)
+    ygrid = np.linspace(np.min(positions[:,1]), np.max(positions[:,1]), Source.Nmesh)
+    zgrid = np.linspace(np.min(positions[:,2]), np.max(positions[:,2]), Source.Nmesh)
+    velocity_interp = RegularGridInterpolator((xgrid, ygrid, zgrid), vhat)
     
     return velocity_interp(positions)
 
+def ReconsctructedVelocityMesh(Source, painted_velocities):
+    '''
+    '''
+    #halo_cat_with_vhat = Source.
+    #halo_cat_with_vhat['Position'] = np.array(Source.data['Position'])
+    #halo_cat_with_vhat['Vz'] = painted_velocities
+    vhat_fkp_cat = FKPVelocityCatalog(Source.data)
+    vhat_fkp_cat['data/NZ'] = Source.nofz(Source.data['z'])
+    vhat_fkp_cat['data/Vz'] = painted_velocities / (np.var(painted_velocities) + 1e8*vhat_fkp_cat['data/NZ']) # replace true velocities with recon
+    vhat_fkp_mesh = vhat_fkp_cat.to_mesh(Nmesh=Source.Nmesh, fkp_weight='Vz', resampler='tsc')
+    
+    return  vhat_fkp_mesh
 
-def RunReconstruction(Source, CMBMap, ClMap=None, RA=None, DEC=None, ComputePower=True, dk=5e-3, Iso=True, Nmu=5):
+def RunReconstruction(Source, CMBMap, ClMap=None, RA=None, DEC=None, ComputePower=True, dk=5e-3, Iso=True, Nmu=5, dk_poles=1e-2):
     '''
     Input: Source - Either nbodysim or lightcone object
     '''
@@ -253,6 +267,8 @@ def RunReconstruction(Source, CMBMap, ClMap=None, RA=None, DEC=None, ComputePowe
     noise_of_k      = CalculateNoise(Source, delta_e_times_T, filter_dict, ClMap=ClMap, RA=RA, DEC=DEC)
     vhat_of_k       = (noise_of_k)**-1 * delta_e_times_T.r2c()
     vhat            = vhat_of_k.c2r()
+    vhat_at_halos   = PaintedVelocities(Source, vhat)
+    vhat_fkp_mesh   = ReconsctructedVelocityMesh(Source, vhat_at_halos)
 
     print(type(delta_e_field))
     
@@ -278,8 +294,12 @@ def RunReconstruction(Source, CMBMap, ClMap=None, RA=None, DEC=None, ComputePowe
         Pk_vq = FFTPower(vhat_of_k, second=Source.halo_momentum_mesh, mode='1d', dk=dk, kmin=0, kmax=0.3)#, BoxSize=Pk_vv.attrs['BoxSize'])
         Pk_qq = FFTPower(Source.halo_momentum_mesh, mode='1d', dk=dk, kmin=0, kmax=0.3)
         #Pk_gg = FFTPower(Source.halo_mesh, mode='1d', dk=dk, kmin=0, kmax=0.3)
-
-        return vhat, Pk_vq, Pk_vv, Pk_qq
+        
+        Pk_ell_vq = ConvolvedFFTPower(Source.halo_mesh, second=Source.halo_momentum_mesh, poles=[0, 2, 4], dk=dk_poles, kmin=0.) # halo mesh must be first
+        Pk_ell_vq_hat = ConvolvedFFTPower(Source.halo_mesh, second=vhat_fkp_mesh, poles=[0, 2, 4], dk=dk_poles, kmin=0.)
+        
+        
+        return vhat, Pk_vq, Pk_vv, Pk_qq, Pk_ell_vq, Pk_ell_vq_hat
     
     else:
         return vhat

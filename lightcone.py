@@ -7,6 +7,14 @@ import numpy as np
 from scipy.interpolate import InterpolatedUnivariateSpline, RegularGridInterpolator
 from scipy.optimize import minimize
 
+import dask.dataframe as dd
+import dask.array as da
+import h5py
+import pandas as pd
+import os
+os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
+
+
 import nbodykit
 from nbodykit.lab import *
 from nbodykit.algorithms.convpower.catalog import FKPVelocityCatalog
@@ -40,9 +48,9 @@ class LightCone:
         
         return
 
-    def LoadGalaxies(self, SimDir, SimType, GenerateRand=False, z_min=0.0, z_max=5.0, ra_min=-180, ra_max=180, dec_min=-90, dec_max=90, alpha=0.1):
+    def LoadGalaxies(self, SimDir, SimType, GenerateRand=False, z_min=0.0, z_max=5.0, ra_min=-180, ra_max=180, dec_min=-90, dec_max=90, alpha=0.1, Offset=0, Downsample=1):
         '''
-        Implemented SimTypes: Magneticum, Sehgal
+        Implemented SimTypes: Magneticum, Sehgal, WebSky and numpy
         '''
         if SimType=='Magneticum':
             halos = np.loadtxt(SimDir)
@@ -113,7 +121,7 @@ class LightCone:
             
                 # only take first five entries for testing (there are ~8e8 halos total...)
                 # comment the following line to read in all halos
-                N = int(5e8)
+                #N = int(3e8)
                 
                 catalog=np.fromfile(f,count=N*10,dtype=np.float32)
             
@@ -130,85 +138,7 @@ class LightCone:
             #z_interp = np.linspace(z_min, z_max, 1000)
             #z_of_chi = InterpolatedUnivariateSpline(self.cosmo.comoving_distance(z_interp)/self.cosmo.h, z_interp)
             #redshift = z_of_chi(chi)
-
-            '''
-            # load catalogue header
-            Nhalo            = np.fromfile(halo_catalogue_file, dtype=np.int32, count=1)[0]
-            #if not(Nmax is None):
-            #    Nhalo = int(Nmax)
-            RTHMAXin         = np.fromfile(halo_catalogue_file, dtype=np.float32, count=1)
-            redshiftbox      = np.fromfile(halo_catalogue_file, dtype=np.float32, count=1)
-            print("\nNumber of Halos in full catalogue %d \n " % Nhalo)
-
-            nfloats_perhalo = 10
-            npkdata         = nfloats_perhalo*Nhalo
-            print(npkdata)
-
-            # load catalogue data
-            halodata        = np.fromfile(halo_catalogue_file, dtype=np.float32, count=npkdata)
-            halodata        = np.reshape(halodata,(Nhalo, nfloats_perhalo))
             
-            # change from R_th to halo mass (M_200,M)
-            rho_mean = 2.775e11 * self.cosmo.Om0 * self.cosmo.h**2
-            halodata[:,6] = 4.0/3*np.pi * halodata[:,6]**3 * rho_mean        
-        
-            # cut mass range
-            #if mmin > 0 or mmax < np.inf:
-            #    dm = (halodata[:,6] > mmin) & (halodata[:,6] < mmax) 
-            #    halodata = halodata[dm]
-
-            # cut redshift range
-            if z_min > 0 or z_max < np.inf:
-                #self.import_astropy()
-                rofzmin = self.cosmo.comoving_distance(z_min)
-                rofzmax = self.cosmo.comoving_distance(z_max)
-
-                rpp =  np.sqrt( np.sum(halodata[:,:3]**2, axis=1))
-
-                dm = (rpp > rofzmin) & (rpp < rofzmax) 
-                halodata = halodata[dm]
-
-            # cut distance range
-            #if rmin > 0 or rmax < np.inf:
-            #    rpp =  np.sqrt(np.sum(halodata[:,:3]**2, axis=1))
-
-           #     dm = (rpp > rmin) & (rpp < rmax) 
-           #     halodata = halodata[dm]
-
-
-            # get halo redshifts and crop all non practical information
-            #self.import_astropy()
-
-            # set up comoving distance to redshift interpolation table
-            rpp =  np.sqrt( np.sum(halodata[:,:3]**2, axis=1))
-
-            z_interp = np.linspace(z_min, z_max, 1000)
-            z_of_chi = InterpolatedUnivariateSpline(self.cosmo.comoving_distance(z_interp)/self.cosmo.h, z_interp) 
-            #zminh = self.z_at_value(self.astropy_cosmo.comoving_distance, rpp.min()*self.u.Mpc)
-            #zmaxh = self.z_at_value(self.astropy_cosmo.comoving_distance, rpp.max()*self.u.Mpc)
-            zminh = z_of_chi(rpp.min())
-            zmaxh = z_of_chi(rpp.max())
-            zgrid = np.linspace(zminh, zmaxh, 10000)
-            dgrid = self.cosmo.comoving_distance(zgrid)
-            
-            # first replace 7th column with redshift
-            halodata[:,7] = np.interp(rpp, dgrid, zgrid)
-            
-            # crop un-practical halo information
-            halodata = halodata[:,:8]
-            
-            Nhalo = halodata.shape[0] 
-            Nfloat_perhalo = halodata.shape[1]
-
-            np.save('/home/r/rbond/alague/scratch/ksz-pipeline/ksz-analysis/quadratic_estimator/development_code/reduced-z-websky-catalog.npy', halodata)
-            # write out halo catalogue information
-            #if self.verbose: 
-            print("Halo catalogue after cuts: np.array((Nhalo=%d, floats_per_halo=%d)), containing:\n" % (Nhalo, Nfloat_perhalo))
-            print("0:x [Mpc], 1:y [Mpc], 2:z [Mpc], 3:vx [km/s], 4:vy [km/s], 5:vz [km/s],\n 6:M [M_sun (M_200,m)], 7:redshift(chi_halo) \n")
-            #else:
-            #    print("0:x [Mpc], 1:y [Mpc], 2:z [Mpc], 3:vx [km/s], 4:vy [km/s], 5:vz [km/s],\n"+ 
-            #          "6:M [M_sun (M_200,m)], 7:x_lag [Mpc], 8:y_lag [Mpc], 9:z_lag [Mpc]\n")
-            '''
             #self.data['z'] = halodata[:,7]
             self.data = {}
 
@@ -219,8 +149,22 @@ class LightCone:
             self.data['dec'] = np.array(dec)[ind]
             self.data['z'] = np.array(z)[ind]
             self.data['Vz'] = vrad[ind]
+            self.data['M200m'] = M200m[ind]
             
             print(self.data['z'].shape)
+
+        elif SimType == 'numpy':
+            # Need to have x, y, z, vrad, ra, dec, redshift columns in npy file
+            catalog = np.load(SimDir)
+            x, y, z, vrad, ra, dec, redshift = catalog[:, Offset::Downsample]
+            print("Loaded catalog with " + str(len(x)) + " objects") 
+            self.data = {}
+            self.data['ra'] = ra
+            self.data['dec'] = dec
+            self.data['z'] = redshift
+            self.data['Position'] = np.array([x, y, z]).T
+            self.data['Vz'] = vrad
+            
         else:
             raise Exception("Simulation type not implemented")
         
@@ -231,12 +175,16 @@ class LightCone:
         self.minZ = self.data['z'].min()
         self.maxZ = self.data['z'].max()
 
-        # Store in ArrayCatalog object
-        self.data = ArrayCatalog(self.data)
-
         # Include Cartesian coords
-        self.data['Position'] = transform.SkyToCartesian(self.data['ra'], self.data['dec'], self.data['z'], cosmo=self.cosmo)
-        box = np.max(np.array(self.data['Position'])) - np.min(np.array(self.data['Position']))
+        if 'Position' not in self.data.keys():
+            self.data = ArrayCatalog(self.data)  # Store in ArrayCatalog object
+            self.data['Position'] = transform.SkyToCartesian(self.data['ra'], self.data['dec'], self.data['z'], cosmo=self.cosmo)
+
+        else:
+            self.data = ArrayCatalog(self.data) # Store in ArrayCatalog object
+        
+        #box = np.max(np.array(self.data['Position'])) - np.min(np.array(self.data['Position']))
+        box = [np.max(np.array(self.data['Position'])[:,i]) - np.min(np.array(self.data['Position'])[:,i]) for i in range(3)]
         print(box)
         self.BoxSize = box
         
@@ -244,19 +192,40 @@ class LightCone:
             # Calculate nofz from data
             self.CalculateNofZ(UseData=True)
             self.GenerateRandoms(alpha=alpha)
-
+            
         # TODO: add warning if alpha changed but not generating randoms
         
         return
     
-    def LoadRandoms(self, SimDir, SimType):
+    def LoadRandoms(self, SimDir, FileType, Nfiles=1):
+        
+        self.randoms = {}
+        
+        frames = []
+        for i in range(Nfiles):
+            fn = SimDir + str(i) + '.' + FileType
+            #frames.append(pd.DataFrame(np.array(h5py.File(fn)['Position'])))
+            frames.append(np.array(h5py.File(fn)['Position']))
+        self.randoms['Position'] = np.concatenate(frames) #pd.concat(frames)
+        
+        print("Loaded randoms with shape ", self.randoms['Position'].shape)
+        
+        self.randoms = ArrayCatalog(self.randoms)
+        
+        self.randoms['ra'], self.randoms['dec'], self.randoms['z'] = transform.CartesianToSky(self.randoms['Position'], cosmo=self.cosmo)
+        
+        self.alpha = self.data.csize / self.randoms.csize
+        self.CalculateNofZ()
+        
         return
 
     def GenerateFKPCatalog(self):
         
+        self.data['NZ'] = self.nofz(self.data['z'])
+        self.randoms['NZ'] = self.nofz(self.randoms['z'])
         self.fkp_catalog = FKPCatalog(self.data, self.randoms)
-        self.fkp_catalog['randoms/NZ'] = self.nofz(self.randoms['z'])
-        self.fkp_catalog['data/NZ'] = self.nofz(self.data['z'])
+        #self.fkp_catalog['randoms/NZ'] = self.nofz(self.randoms['z'])
+        #self.fkp_catalog['data/NZ'] = self.nofz(self.data['z'])
         
         # TODO: function in case FKP/completeness included in data
         self.fkp_catalog['data/FKPWeight'] = 1.0 / (1 + self.fkp_catalog['data/NZ'] * 1e4)
@@ -265,7 +234,8 @@ class LightCone:
         # Create a velocity catalog (without randoms)
         self.fkp_velocity_catalog = FKPVelocityCatalog(self.data)
         self.fkp_velocity_catalog['data/NZ'] = self.nofz(self.data['z'])
-        self.fkp_velocity_catalog['data/FKPWeight'] = self.data['Vz'] #/ () # TODO: Implement Howlett's weights
+        self.fkp_velocity_catalog['data/FKPWeight'] = self.data['Vz'] / (np.var(self.data['Vz']) + self.fkp_velocity_catalog['data/NZ'] *1e8) 
+        #/ () # TODO: Implement Howlett's weights
 
         return
 
@@ -322,8 +292,8 @@ class LightCone:
     
     def PaintMesh(self):
         # TODO: include completeness weights
-        self.halo_mesh = self.fkp_catalog.to_mesh(Nmesh=self.Nmesh, nbar='NZ', fkp_weight='FKPWeight', BoxSize=self.BoxSize)
-        self.halo_momentum_mesh = self.fkp_velocity_catalog.to_mesh(Nmesh=self.Nmesh, nbar='NZ', fkp_weight='FKPWeight', BoxSize=self.BoxSize)
+        self.halo_mesh = self.fkp_catalog.to_mesh(Nmesh=self.Nmesh, nbar='NZ', fkp_weight='FKPWeight', BoxSize=self.BoxSize, resampler='tsc')
+        self.halo_momentum_mesh = self.fkp_velocity_catalog.to_mesh(Nmesh=self.Nmesh, nbar='NZ', fkp_weight='FKPWeight', BoxSize=self.BoxSize, resampler='tsc')
         return
     
     def CalculateMultipoles(self, poles=[0, 2, 4], kmin=0.0, kmax=0.3, dk=5e-3):
