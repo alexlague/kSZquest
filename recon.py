@@ -9,6 +9,7 @@ from scipy import constants
 
 import nbodykit
 from nbodykit.lab import *
+import pmesh
 try:
     from nbodykit.algorithms.convpower.catalog import FKPVelocityCatalog
 except:
@@ -197,8 +198,13 @@ def Delta_eField(Source, FilterDictionary):
     
     # Estimate delta_e on grid
     pge_pgg_filter = FilterDictionary['pge_pgg']
-    mesh_delta_e  = Source.halo_mesh.apply(pge_pgg_filter, mode='complex', kind='wavenumber')
-    delta_e_field = mesh_delta_e.to_field() # get data in array form
+    
+    if isinstance(Source.halo_mesh, pmesh.pm.RealField):
+        delta_e_field  = Source.halo_mesh.r2c().apply(pge_pgg_filter, kind='wavenumber').c2r()
+        
+    else:
+        mesh_delta_e  = Source.halo_mesh.apply(pge_pgg_filter, mode='complex', kind='wavenumber')
+        delta_e_field = mesh_delta_e.to_field() # get data in array form
 
     return delta_e_field
 
@@ -239,7 +245,7 @@ def PaintedVelocities(Source, vhat):
     
     return velocity_interp(positions)
 
-def ReconsctructedVelocityMesh(Source, painted_velocities):
+def ReconstructedVelocityMesh(Source, painted_velocities):
     '''
     '''
     #halo_cat_with_vhat = Source.
@@ -267,8 +273,11 @@ def RunReconstruction(Source, CMBMap, ClMap=None, RA=None, DEC=None, ComputePowe
     noise_of_k      = CalculateNoise(Source, delta_e_times_T, filter_dict, ClMap=ClMap, RA=RA, DEC=DEC)
     vhat_of_k       = (noise_of_k)**-1 * delta_e_times_T.r2c()
     vhat            = vhat_of_k.c2r()
+    
+    vhat[delta_e_times_T==0] = 0. # electron velocity undefined where there are no electrons
+    
     vhat_at_halos   = PaintedVelocities(Source, vhat)
-    vhat_fkp_mesh   = ReconsctructedVelocityMesh(Source, vhat_at_halos)
+    vhat_fkp_mesh   = ReconstructedVelocityMesh(Source, vhat_at_halos)
 
     print(type(delta_e_field))
     
@@ -299,7 +308,7 @@ def RunReconstruction(Source, CMBMap, ClMap=None, RA=None, DEC=None, ComputePowe
         Pk_ell_vq_hat = ConvolvedFFTPower(Source.halo_mesh, second=vhat_fkp_mesh, poles=[0, 2, 4], dk=dk_poles, kmin=0.)
         
         
-        return vhat, Pk_vq, Pk_vv, Pk_qq, Pk_ell_vq, Pk_ell_vq_hat
+        return vhat_at_halos, Pk_vq, Pk_vv, Pk_qq, Pk_ell_vq, Pk_ell_vq_hat
     
     else:
         return vhat

@@ -14,10 +14,11 @@ import pandas as pd
 import os
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
 
-
 import nbodykit
 from nbodykit.lab import *
 from nbodykit.algorithms.convpower.catalog import FKPVelocityCatalog
+
+from pypower import CatalogFFTPower, smooth_window
 
 from hmvec.ksz import get_ksz_auto_squeezed
 
@@ -117,11 +118,11 @@ class LightCone:
             rho = 2.775e11*omegam*h**2 # Msun/Mpc^3
             
             with open(SimDir) as f:
-                N=np.fromfile(f,count=3,dtype=np.int32)[0]
+                #N=np.fromfile(f,count=3,dtype=np.int32)[0]
             
                 # only take first five entries for testing (there are ~8e8 halos total...)
                 # comment the following line to read in all halos
-                #N = int(3e8)
+                N = int(1e8)
                 
                 catalog=np.fromfile(f,count=N*10,dtype=np.float32)
             
@@ -152,18 +153,19 @@ class LightCone:
             self.data['M200m'] = M200m[ind]
             
             print(self.data['z'].shape)
-
+            
         elif SimType == 'numpy':
             # Need to have x, y, z, vrad, ra, dec, redshift columns in npy file
             catalog = np.load(SimDir)
             x, y, z, vrad, ra, dec, redshift = catalog[:, Offset::Downsample]
-            print("Loaded catalog with " + str(len(x)) + " objects") 
+            ind = (redshift <= z_max) & (redshift >= z_min) & (ra >= ra_min) & (ra <= ra_max) & (dec >= dec_min) & (dec <= dec_max)
+            print("Loaded catalog with " + str(len(x[ind])) + " objects") 
             self.data = {}
-            self.data['ra'] = ra
-            self.data['dec'] = dec
-            self.data['z'] = redshift
-            self.data['Position'] = np.array([x, y, z]).T
-            self.data['Vz'] = vrad
+            self.data['ra'] = ra[ind]
+            self.data['dec'] = dec[ind]
+            self.data['z'] = redshift[ind]
+            self.data['Position'] = np.array([x[ind], y[ind], z[ind]]).T
+            self.data['Vz'] = vrad[ind]
             
         else:
             raise Exception("Simulation type not implemented")
@@ -200,19 +202,25 @@ class LightCone:
     def LoadRandoms(self, SimDir, FileType, Nfiles=1):
         
         self.randoms = {}
+        tmp = {}
         
         frames = []
         for i in range(Nfiles):
             fn = SimDir + str(i) + '.' + FileType
             #frames.append(pd.DataFrame(np.array(h5py.File(fn)['Position'])))
             frames.append(np.array(h5py.File(fn)['Position']))
-        self.randoms['Position'] = np.concatenate(frames) #pd.concat(frames)
+        tmp['Position'] = np.concatenate(frames) #pd.concat(frames)
+        
+        tmp = ArrayCatalog(tmp)
+        
+        ra, dec, redshift = transform.CartesianToSky(tmp['Position'], cosmo=self.cosmo)
+        ind = (redshift <= self.maxZ) & (redshift >= self.minZ) & (ra >= self.minRA) & (ra <= self.maxRA) & (dec >= self.minDEC) & (dec <= self.maxDEC)
+        
+        self.randoms['Position'] = tmp['Position'][ind]
+        self.randoms['ra'], self.randoms['dec'], self.randoms['z'] = np.array(ra)[ind], np.array(dec)[ind], np.array(redshift)[ind]
         
         print("Loaded randoms with shape ", self.randoms['Position'].shape)
-        
         self.randoms = ArrayCatalog(self.randoms)
-        
-        self.randoms['ra'], self.randoms['dec'], self.randoms['z'] = transform.CartesianToSky(self.randoms['Position'], cosmo=self.cosmo)
         
         self.alpha = self.data.csize / self.randoms.csize
         self.CalculateNofZ()
@@ -239,13 +247,46 @@ class LightCone:
 
         return
 
-    def LoadCMBMap(self, SimDir, SimType):
-        return
-
+ 
     def CalculateWindowFunction(self):
+        
+        # Extract data and random positions
+        dp1 = self.data['Position']
+        dw1 = self.fkp_catalog['data/FKPWeight']
+        rp1 = self.randoms['Position']
+        rw1 = self.fkp_catalog['randoms/FKPWeight']
+        box = np.array(self.BoxSize) * 1.05
+        ked = np.linspace(0., 0.1, 21)
+
+        # Compute reference pk from pypower
+        ref = CatalogFFTPower(data_positions1=dp1, data_weights1=dw1, randoms_positions1=rp1, randoms_weights1=rw1, edges=ked, ells=(0, 2, 4), boxsize=box, nmesh=128, resampler='tsc', interlacing=2, los='firstpoint', position_type='pos', mpiroot=0,)
+        
+        # Compute window of survey in Fourier space
+        Wk = smooth_window.CatalogSmoothWindow(randoms_positions1=np.array(rp1).T, randoms_weights1=np.array(rw1), power_ref=ref)
+        
+        # Inverse Fourier transform
+        sep = np.geomspace(1e-2, 8e3, 2048)
+        Ws =  Wk.poles.to_real(sep=sep)
+        
+        # Store interpolated configuration space normalized window
+        self.window = InterpolatedUnivariateSpline(Ws.sep, Ws(proj=0)/Ws(proj=0)[0])
+        
         return
 
     def DeconvolveWindowFunction(self):
+        
+        if ~hasattr(self, "window"):
+            self.CalculateWindowFunction()
+        
+        def deconv_window(r, v):
+            rr = sum(ri ** 2 for ri in r) # r^2 on the mesh
+            rr[rr == 0] = 1
+            return v / np.sqrt(self.window(np.sqrt(rr))) # divide the mesh by W(r) (window is W^2)
+
+        # apply the filter and get a new mesh
+        self.halo_mesh = self.halo_mesh.apply(deconv_window, mode='real', kind='relative').to_field()
+        self.halo_momentum_mesh = self.halo_momentum_mesh.apply(deconv_window, mode='real', kind='relative').to_field()
+        
         return
 
     def GenerateRandoms(self, alpha=0.1):
