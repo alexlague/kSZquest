@@ -15,6 +15,8 @@ try:
 except:
     pass
 
+from pypower import CatalogFFTPower
+
 from pixell import enmap
 
 import lightcone
@@ -82,8 +84,27 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None):
         CMBMap_interp = RegularGridInterpolator((RAs, DECs), CMBMap, bounds_error=False, fill_value=0.)
         zs = np.linspace(Source.minZ, Source.maxZ, Nmesh)
         chis = Source.cosmo.comoving_distance(zs)
-        for i in range(Nmesh): T_grid[i] = CMBMap_interp((RA_mesh * chis[-1]/chis[i], DEC_mesh * chis[-1]/chis[i]))
+        
+        # Catalog approach
+        #shuffled_rands_data = {}
+        #shuffled_rands_randoms = {}
+        #shuffled_indx = np.random.shuffle(np.arange(len(Source.randoms['Position'])))
+        #shuffled_rands_randoms['Position'] = Source.randoms['Position']
+        #shuffled_rands_data['Position'] = Source.randoms['Position'][shuffled_indx]
+
+        ras = np.array(Source.randoms['ra'])
+        decs = np.array(Source.randoms['dec'])
+        T_vals = CMBMap_interp((ras, decs))
+
+        T_fkp = FKPCatalog(Source.randoms, Source.randoms) #Source.fkp_catalog.copy()
+        
+        T_fkp['data/FKPWeight'] = T_vals # temp map at that ra, dec
+
+        #for i in range(Nmesh): T_grid[i] = CMBMap_interp((RA_mesh * chis[-1]/chis[i], DEC_mesh * chis[-1]/chis[i]))
         #for i in range(Nmesh): T_grid[i] = CMBMap_interp((RA_mesh, DEC_mesh))
+        T_grid = T_fkp.to_mesh(Nmesh=Nmesh, compensated=False, resampler='tsc').to_field() #/ Source.halo_mesh.to_field()
+        #T_grid[np.isnan(T_grid)] = 0.
+        #T_grid[~np.isfinite(T_grid)] = 0.
 
     return T_grid
 
@@ -167,8 +188,8 @@ def CreateFilters(Source, Iso=True):
             kk = sum(ki ** 2 for ki in k) # k^2 on the mesh
             kk[kk == 0] = 1
             mu = k[2] / kk
-            num = Pge(np.sqrt(kk)/h, mu)*h**3
-            den = Pgg(np.sqrt(kk)/h, mu)*h**3
+            num = Pge(np.sqrt(kk), mu)#*h**3
+            den = Pgg(np.sqrt(kk), mu)#*h**3
             fil = num / den
             fil[np.isnan(fil)] = 1.
             return v * fil
@@ -177,8 +198,8 @@ def CreateFilters(Source, Iso=True):
             kk = sum(ki ** 2 for ki in k) # k^2 on the mesh
             kk[kk == 0] = 1
             mu = k[2] / kk
-            num = Pge(np.sqrt(kk)/h, mu)*h**3
-            den = Pgg(np.sqrt(kk)/h, mu)*h**3
+            num = Pge(np.sqrt(kk), mu)#*h**3
+            den = Pgg(np.sqrt(kk), mu)#*h**3
             fil = num**2 / den
             fil[np.isnan(fil)] = 1.
             return v * fil
@@ -254,7 +275,7 @@ def ReconstructedVelocityMesh(Source, painted_velocities):
     vhat_fkp_cat = FKPVelocityCatalog(Source.data)
     vhat_fkp_cat['data/NZ'] = Source.nofz(Source.data['z'])
     vhat_fkp_cat['data/Vz'] = painted_velocities / (np.var(painted_velocities) + 1e8*vhat_fkp_cat['data/NZ']) # replace true velocities with recon
-    vhat_fkp_mesh = vhat_fkp_cat.to_mesh(Nmesh=Source.Nmesh, fkp_weight='Vz', resampler='tsc')
+    vhat_fkp_mesh = vhat_fkp_cat.to_mesh(Nmesh=Source.Nmesh, fkp_weight='Vz', resampler='tsc', compensated=False)
     
     return  vhat_fkp_mesh
 
@@ -299,16 +320,16 @@ def RunReconstruction(Source, CMBMap, ClMap=None, RA=None, DEC=None, ComputePowe
         # TODO: add 3d pk mu
         #Pk_vv = ConvolvedFFTPower(vhat_of_k, poles=[0, 2], dk=dk, kmax=0.3, kmin=0,).power
         #Pk_vg = ConvolvedFFTPower(vhat_of_k, second=Source.halo_mesh, poles=[0, 2], dk=dk, kmax=0.3, kmin=0,).power
-        Pk_vv = FFTPower(vhat_of_k, mode='1d', dk=dk, kmin=0, kmax=0.3)
-        Pk_vq = FFTPower(vhat_of_k, second=Source.halo_momentum_mesh, mode='1d', dk=dk, kmin=0, kmax=0.3)#, BoxSize=Pk_vv.attrs['BoxSize'])
+        Pk_vv = FFTPower(vhat, mode='1d', dk=dk, kmin=0, kmax=0.3)
+        Pk_vq = FFTPower(vhat, second=Source.halo_momentum_mesh, mode='1d', dk=dk, kmin=0, kmax=0.3)#, BoxSize=Pk_vv.attrs['BoxSize'])
         Pk_qq = FFTPower(Source.halo_momentum_mesh, mode='1d', dk=dk, kmin=0, kmax=0.3)
         #Pk_gg = FFTPower(Source.halo_mesh, mode='1d', dk=dk, kmin=0, kmax=0.3)
         
-        Pk_ell_vq = ConvolvedFFTPower(Source.halo_mesh, second=Source.halo_momentum_mesh, poles=[0, 2, 4], dk=dk_poles, kmin=0.) # halo mesh must be first
-        Pk_ell_vq_hat = ConvolvedFFTPower(Source.halo_mesh, second=vhat_fkp_mesh, poles=[0, 2, 4], dk=dk_poles, kmin=0.)
+        #Pk_ell_vq = ConvolvedFFTPower(Source.halo_mesh, second=Source.halo_momentum_mesh, poles=[0,], dk=dk_poles, kmin=0.) # halo mesh must be first
+        #Pk_ell_vq_hat = ConvolvedFFTPower(Source.halo_mesh, second=vhat_fkp_mesh, poles=[0,], dk=dk_poles, kmin=0.)
+
         
-        
-        return vhat_at_halos, Pk_vq, Pk_vv, Pk_qq, Pk_ell_vq, Pk_ell_vq_hat
+        return vhat_at_halos, Pk_vq, Pk_vv, Pk_qq, vhat #Pk_ell_vq, Pk_ell_vv, Pk_ell_qq 
     
     else:
         return vhat

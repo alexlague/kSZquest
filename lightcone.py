@@ -53,6 +53,9 @@ class LightCone:
         '''
         Implemented SimTypes: Magneticum, Sehgal, WebSky and numpy
         '''
+        
+        self.alpha = alpha
+
         if SimType=='Magneticum':
             halos = np.loadtxt(SimDir)
             flag = halos[:,17]
@@ -61,10 +64,11 @@ class LightCone:
             ypix     = halos[:,2]
             z_obs    = halos[:,7]
 
-            ras = (xpix[ind]-.5) * 35
-            decs = (ypix[ind]-.5) * 35
+            ras = (xpix-.5) * 35
+            decs = (ypix-.5) * 35
+
+            ind = (z_obs <= z_max) & (z_obs >= z_min) & (ras >= ra_min) & (ras <= ra_max) & (decs >= dec_min) & (decs <= dec_max)
             
-            ind = (z_obs <= z_max) & (z_obs >= z_min) & (ras >= ra_min) & (ras <= ra_max) & (decs >= dec_min) & (decs <= dec_max) 
             self.data = {}
             self.data['ra'] = ras[ind]
             self.data['dec'] = decs[ind]
@@ -181,6 +185,7 @@ class LightCone:
         if 'Position' not in self.data.keys():
             self.data = ArrayCatalog(self.data)  # Store in ArrayCatalog object
             self.data['Position'] = transform.SkyToCartesian(self.data['ra'], self.data['dec'], self.data['z'], cosmo=self.cosmo)
+        
 
         else:
             self.data = ArrayCatalog(self.data) # Store in ArrayCatalog object
@@ -300,10 +305,12 @@ class LightCone:
         h_indexes = np.arange(len(rand['z']))
         hzs = rand['z']
         dist = abs(self.nofz(hzs)) # distribution
+        dist *= self.cosmo.comoving_distance(hzs) # account for volume change in density
         dist /= np.sum(dist) # normalized
         Nrand =  self.data.csize / alpha
 
         his = np.random.choice(h_indexes, size=int(Nrand), p=dist, replace=False) # indexes of selected halos
+        his = np.sort(his) # sort to slice dask array more efficiently
 
         self.randoms = {}
         self.randoms['z'] = rand['z'][his]
@@ -333,8 +340,8 @@ class LightCone:
     
     def PaintMesh(self):
         # TODO: include completeness weights
-        self.halo_mesh = self.fkp_catalog.to_mesh(Nmesh=self.Nmesh, nbar='NZ', fkp_weight='FKPWeight', BoxSize=self.BoxSize, resampler='tsc')
-        self.halo_momentum_mesh = self.fkp_velocity_catalog.to_mesh(Nmesh=self.Nmesh, nbar='NZ', fkp_weight='FKPWeight', BoxSize=self.BoxSize, resampler='tsc')
+        self.halo_mesh = self.fkp_catalog.to_mesh(Nmesh=self.Nmesh, nbar='NZ', fkp_weight='FKPWeight', BoxSize=self.BoxSize, resampler='tsc', compensated=False)
+        self.halo_momentum_mesh = self.fkp_velocity_catalog.to_mesh(Nmesh=self.Nmesh, nbar='NZ', fkp_weight='FKPWeight', BoxSize=self.BoxSize, resampler='tsc', compensated=False)
         return
     
     def CalculateMultipoles(self, poles=[0, 2, 4], kmin=0.0, kmax=0.3, dk=5e-3):
@@ -369,11 +376,11 @@ class LightCone:
 
 
         if hasattr(self, "zeff"):
-            self.Pge_kmu = lambda k, mu: Pge_kmu_interp((zeff, k, mu))
-            self.Pgg_kmu = lambda k, mu: Pgg_kmu_interp((zeff, k, mu))
+            self.Pge_kmu = lambda k, mu: Pge_kmu_interp((zeff, k*self.cosmo.h, mu))
+            self.Pgg_kmu = lambda k, mu: Pgg_kmu_interp((zeff, k*self.cosmo.h, mu))
         else:
-            self.Pge_kmu = lambda k, mu: Pge_kmu_interp(((self.maxZ+self.minZ)/2, k, mu))
-            self.Pgg_kmu = lambda k, mu: Pgg_kmu_interp(((self.maxZ+self.minZ)/2, k, mu))
+            self.Pge_kmu = lambda k, mu: Pge_kmu_interp(((self.maxZ+self.minZ)/2, k*self.cosmo.h, mu))
+            self.Pgg_kmu = lambda k, mu: Pgg_kmu_interp(((self.maxZ+self.minZ)/2, k*self.cosmo.h, mu))
             
         return
         
