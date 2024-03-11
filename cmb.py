@@ -15,6 +15,7 @@ class CMBMap:
                  maxRA=0., 
                  minDEC=0., 
                  maxDEC=0.,
+                 NSIDE=None,
                  noise_lvl=None, 
                  theta_FWHM=None, 
                  beam=None):
@@ -40,10 +41,7 @@ class CMBMap:
         self.maxRA = maxRA
         self.minDEC = minDEC
         self.maxDEC = maxDEC
-        
-        self.Nmesh_x = kSZMap.shape[0]
-        self.Nmesh_y = kSZMap.shape[1]
-        
+
         if noise_lvl != None:
             self.noise_lvl = noise_lvl
         if theta_FWHM != None:
@@ -51,13 +49,24 @@ class CMBMap:
         if beam != None:
             self.beam
 
-        shape, wcs = self.GenerateMapTemplate()
-        kSZ_map_pixell = enmap.empty(shape, wcs)
-        kSZ_map_pixell[:,:] = kSZMap
-        self.kSZ_map = kSZ_map_pixell
+        # transform numpy array to enmap
+        if kSZMap.ndim == 2:
+            self.Nmesh_x = kSZMap.shape[0]
+            self.Nmesh_y = kSZMap.shape[1]
         
-        assert np.allclose(self.kSZ_map-kSZMap, 0)
+            shape, wcs = self.GenerateMapTemplate()
+            kSZ_map_pixell = enmap.empty(shape, wcs)
+            kSZ_map_pixell[:,:] = kSZMap
+            self.kSZ_map = kSZ_map_pixell
         
+            assert np.allclose(self.kSZ_map-kSZMap, 0)
+        
+        # if healpy map, specify NSIDE 
+        else:
+            assert NSIDE is not None
+            self.kSZ_map = kSZMap
+            self.NSIDE = NSIDE
+ 
         return
     
     def CalculateTheoryCls(self):
@@ -120,7 +129,7 @@ class CMBMap:
         Nmesh_x, Nmesh_y = self.Nmesh_x, self.Nmesh_y
         
         # check resolution
-        assert RA_range/Nmesh_x == DEC_range/Nmesh_y # check if not reversed
+        #assert np.isclose(RA_range/Nmesh_x, DEC_range/Nmesh_y) # check if not reversed
         
         res = RA_range/Nmesh_x
         

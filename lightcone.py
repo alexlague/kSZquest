@@ -62,6 +62,7 @@ class LightCone:
             halos = halos[flag==0]
             xpix     = halos[:,1]
             ypix     = halos[:,2]
+            z_true   = halos[:,6]
             z_obs    = halos[:,7]
 
             ras = (xpix-.5) * 35
@@ -74,6 +75,32 @@ class LightCone:
             self.data['dec'] = decs[ind]
             self.data['z'] = z_obs[ind]
 
+            # more accurate way of solving for vlos which doesn't require vlos/c << 1
+            z_sample = np.linspace(0, 2.5, 1000)
+            z_of_dist = InterpolatedUnivariateSpline(self.cosmo.comoving_distance(z_sample), z_sample)
+
+            def rsd(vz_over_aH, zobs, ztrue):
+                return zobs-z_of_dist(self.cosmo.comoving_distance(ztrue)+vz_over_aH)
+            
+            from scipy.optimize import fsolve
+            vlos = np.zeros(xpix[ind].shape)
+            for i in range(len(xpix[ind])):
+                func = lambda vz: rsd(vz, z_true[i], z_obs[i])
+                vlos[i] = fsolve(func, x0=0.)[0]
+            
+            speed_of_light = 299792.458 # km/s 
+            a = 1/(1+z_true[ind])
+            H = self.cosmo.hubble_function(z_true[ind]) # H(z) / c in Mpc^{-1}
+            H *= speed_of_light # now in km/s/Mpc 
+            
+            vlos *= a * H
+            '''
+            
+            speed_of_light = 299792.458 # km/s
+            vlos = (1 + z_obs[ind]) / (1 + z_true[ind]) - 1
+            vlos *= speed_of_light
+            '''
+            self.data['Vz'] = vlos
             
         elif SimType == 'Sehgal':
             halos = np.loadtxt(SimDir)
@@ -122,11 +149,11 @@ class LightCone:
             rho = 2.775e11*omegam*h**2 # Msun/Mpc^3
             
             with open(SimDir) as f:
-                #N=np.fromfile(f,count=3,dtype=np.int32)[0]
+                N=np.fromfile(f,count=3,dtype=np.int32)[0]
             
                 # only take first five entries for testing (there are ~8e8 halos total...)
                 # comment the following line to read in all halos
-                N = int(1e8)
+                #N = int(4e8)
                 
                 catalog=np.fromfile(f,count=N*10,dtype=np.float32)
             
@@ -147,12 +174,12 @@ class LightCone:
             #self.data['z'] = halodata[:,7]
             self.data = {}
 
-            ra, dec, z = transform.CartesianToSky(catalog[:, 0:3], self.cosmo, velocity=catalog[:, 3:6])
+            ra, dec, z = transform.CartesianToSky(catalog[:, 0:3]*self.cosmo.h, self.cosmo, velocity=catalog[:, 3:6])
             
             ind = (z >= z_min) & (z <= z_max) & (ra >= ra_min) & (ra <= ra_max) & (dec >= dec_min) & (dec <= dec_max)
             self.data['ra'] = np.array(ra)[ind]
             self.data['dec'] = np.array(dec)[ind]
-            self.data['z'] = np.array(z)[ind]
+            self.data['z'] = np.array(z)[ind] # redshift
             self.data['Vz'] = vrad[ind]
             self.data['M200m'] = M200m[ind]
             
@@ -161,7 +188,7 @@ class LightCone:
         elif SimType == 'numpy':
             # Need to have x, y, z, vrad, ra, dec, redshift columns in npy file
             catalog = np.load(SimDir)
-            x, y, z, vrad, ra, dec, redshift = catalog[:, Offset::Downsample]
+            x, y, z, vrad, ra, dec, redshift, M200m = catalog[:, Offset::Downsample]
             ind = (redshift <= z_max) & (redshift >= z_min) & (ra >= ra_min) & (ra <= ra_max) & (dec >= dec_min) & (dec <= dec_max)
             print("Loaded catalog with " + str(len(x[ind])) + " objects") 
             self.data = {}
@@ -170,7 +197,8 @@ class LightCone:
             self.data['z'] = redshift[ind]
             self.data['Position'] = np.array([x[ind], y[ind], z[ind]]).T
             self.data['Vz'] = vrad[ind]
-            
+            self.data['M200m'] = M200m[ind]
+
         else:
             raise Exception("Simulation type not implemented")
         
@@ -304,8 +332,7 @@ class LightCone:
         # Subselect z to match nofz from data
         h_indexes = np.arange(len(rand['z']))
         hzs = rand['z']
-        dist = abs(self.nofz(hzs)) # distribution
-        dist *= self.cosmo.comoving_distance(hzs) # account for volume change in density
+        dist = abs(self.nofz(hzs))*self.cosmo.comoving_distance(hzs)**1.5 # distribution
         dist /= np.sum(dist) # normalized
         Nrand =  self.data.csize / alpha
 
