@@ -269,13 +269,14 @@ class LightCone:
         #self.fkp_catalog['data/NZ'] = self.nofz(self.data['z'])
         
         # TODO: function in case FKP/completeness included in data
-        self.fkp_catalog['data/FKPWeight'] = 1.0 / (1 + self.fkp_catalog['data/NZ'] * 1e4)
-        self.fkp_catalog['randoms/FKPWeight'] = 1.0 / (1 + self.fkp_catalog['randoms/NZ'] * 1e4)
+        # DEBUG DENSITY FIELD WEIGHTS
+        self.fkp_catalog['data/FKPWeight'] = np.ones(len(self.fkp_catalog['data/NZ'])) #/ (1 + self.fkp_catalog['data/NZ'] * 1e4)
+        self.fkp_catalog['randoms/FKPWeight'] = np.ones(len(self.fkp_catalog['randoms/NZ'])) #/ (1 + self.fkp_catalog['randoms/NZ'] * 1e4)
 
         # Create a velocity catalog (without randoms)
         self.fkp_velocity_catalog = FKPVelocityCatalog(self.data)
         self.fkp_velocity_catalog['data/NZ'] = self.nofz(self.data['z'])
-        self.fkp_velocity_catalog['data/FKPWeight'] = self.data['Vz'] / (np.var(self.data['Vz']) + self.fkp_velocity_catalog['data/NZ'] *1e8) 
+        self.fkp_velocity_catalog['data/FKPWeight'] = self.data['Vz'] #/ (np.var(self.data['Vz']) + self.fkp_velocity_catalog['data/NZ'] *1e8) 
         #/ () # TODO: Implement Howlett's weights
 
         return

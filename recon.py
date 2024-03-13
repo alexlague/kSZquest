@@ -182,7 +182,11 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None, NSIDE=None):
             #all_pos = data_pos #np.concatenate((data_pos, rand_pos), axis=0)
 
         #samples['T'] = T_vals
-        T_rand_cat = ArrayCatalog({'Position':data_pos, 'T':T_vals}) # samples
+        redshifts = np.array(Source.data['z'])
+        chis = np.array(Source.cosmo.comoving_distance(redshifts))
+        z_weights = chis**2 / (1+redshifts)**2
+        z_weights /= np.mean(z_weights)
+        T_rand_cat = ArrayCatalog({'Position':data_pos, 'T':z_weights*T_vals}) # samples
         T_rand_array = T_rand_cat.to_mesh(BoxSize=Source.BoxSize, Nmesh=Source.Nmesh, value='T') # (1 + delta_rand) * T
         rand_array = T_rand_cat.to_mesh(BoxSize=Source.BoxSize, Nmesh=Source.Nmesh) # (1 + delta_rand)
 
@@ -320,7 +324,7 @@ def Delta_eField(Source, FilterDictionary):
         
     else:
         mesh_delta_e  = Source.halo_mesh.apply(pge_pgg_filter, mode='complex', kind='wavenumber')
-        delta_e_field = mesh_delta_e.to_field() # get data in array form
+        delta_e_field = mesh_delta_e.to_field() - 1 # get data in array form
 
     return delta_e_field
 
@@ -402,7 +406,7 @@ def RunReconstruction(Source, CMBMap, ClMap=None, RA=None, DEC=None, NSIDE=None,
     ## DEBUG
     vhat = delta_e_times_T
 
-    #vhat[delta_e_times_T==0] = 0. # electron velocity undefined where there are no electrons
+    vhat[delta_e_times_T==0] = 0. # electron velocity undefined where there are no electrons
     #vhat[Source.halo_mesh.to_field()==0.] = 0.
 
     vhat_at_halos   = PaintedVelocities(Source, vhat)
