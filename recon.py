@@ -170,7 +170,11 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None, NSIDE=None):
             #samples = Source.data.copy()
             #ras = np.concatenate((ras, grid[0].ravel())) #grid[0].ravel()
             #decs = np.concatenate((decs, grid[1].ravel())) #grid[1].ravel()
+            
+            # DEBUG: TRY VEC2PIX
             pixels = hp.ang2pix(NSIDE, ras, decs, lonlat=True)  #hp.ang2pix(NSIDE, samples['ra'], samples['dec'], lonlat=True)
+            
+            pixels = hp.vec2pix(NSIDE, data_pos[:,0], data_pos[:,1], data_pos[:,2])
             T_vals = CMBMap[pixels]
             
             #T_vals = np.repeat(T_vals, N)
@@ -186,7 +190,7 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None, NSIDE=None):
         chis = np.array(Source.cosmo.comoving_distance(redshifts))
         z_weights = chis**2 / (1+redshifts)**2
         z_weights /= np.mean(z_weights)
-        T_rand_cat = ArrayCatalog({'Position':data_pos, 'T':z_weights*T_vals}) # samples
+        T_rand_cat = ArrayCatalog({'Position':data_pos, 'T': z_weights * T_vals}) # samples
         T_rand_array = T_rand_cat.to_mesh(BoxSize=Source.BoxSize, Nmesh=Source.Nmesh, value='T') # (1 + delta_rand) * T
         rand_array = T_rand_cat.to_mesh(BoxSize=Source.BoxSize, Nmesh=Source.Nmesh) # (1 + delta_rand)
 
@@ -195,14 +199,16 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None, NSIDE=None):
         T_rand_array = T_rand_array.to_field() #apply(Gaussian(50.)).paint(mode='real')
         rand_array = rand_array.to_field() #apply(Gaussian(0.)).paint(mode='real')
 
-        T_grid = T_rand_array / rand_array # SHOULD DIVIDE HERE??
+        T_grid = T_rand_array #/ rand_array # SHOULD DIVIDE HERE?? lower noise if not dividing
         T_grid[rand_array==0.] = 0.
+        
         
         for i in range(3):
             T_grid = np.roll(T_grid, -int(Source.Nmesh/2), axis=i) # shuffle to match other nbodykit meshes
+        
         #T_grid = ArrayMesh(T_grid, Source.BoxSize).to_field()
 
-        T_grid -= np.mean(T_grid) # centered around 0
+        #T_grid -= np.mean(T_grid) # centered around 0
         
     return T_grid
     #return Source.halo_momentum_mesh.to_field() #T_grid

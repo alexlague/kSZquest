@@ -265,6 +265,7 @@ class LightCone:
         self.data['NZ'] = self.nofz(self.data['z'])
         self.randoms['NZ'] = self.nofz(self.randoms['z'])
         self.fkp_catalog = FKPCatalog(self.data, self.randoms)
+
         #self.fkp_catalog['randoms/NZ'] = self.nofz(self.randoms['z'])
         #self.fkp_catalog['data/NZ'] = self.nofz(self.data['z'])
         
@@ -323,31 +324,58 @@ class LightCone:
         
         return
 
-    def GenerateRandoms(self, alpha=0.1):
+    def GenerateRandoms(self, alpha=0.1, nbins=100):
         
-        rand = RandomCatalog(int(4*len(self.data)/alpha))
-        rand['z']   = rand.rng.uniform(low=self.minZ, high=self.maxZ)
-        rand['ra']  = rand.rng.uniform(low=self.minRA, high=self.maxRA)
-        rand['dec'] = rand.rng.uniform(low=self.minDEC, high=self.maxDEC)
+        # OLD METHOD
+        #rand = RandomCatalog(int(4*len(self.data)/alpha))
+        #rand['z']   = rand.rng.uniform(low=self.minZ, high=self.maxZ)
+        #rand['ra']  = rand.rng.uniform(low=self.minRA, high=self.maxRA)
+        #rand['dec'] = rand.rng.uniform(low=self.minDEC, high=self.maxDEC)
         
         # Subselect z to match nofz from data
-        h_indexes = np.arange(len(rand['z']))
-        hzs = rand['z']
-        dist = abs(self.nofz(hzs))*self.cosmo.comoving_distance(hzs)**1.5 # distribution
-        dist /= np.sum(dist) # normalized
-        Nrand =  self.data.csize / alpha
+        #h_indexes = np.arange(len(rand['z']))
+        #hzs = rand['z']
+        #dist = abs(self.nofz(hzs))*self.cosmo.comoving_distance(hzs)**1.5 # distribution
+        #dist /= np.sum(dist) # normalized
+        #Nrand =  self.data.csize / alpha
 
-        his = np.random.choice(h_indexes, size=int(Nrand), p=dist, replace=False) # indexes of selected halos
-        his = np.sort(his) # sort to slice dask array more efficiently
+        #his = np.random.choice(h_indexes, size=int(Nrand), p=dist, replace=False) # indexes of selected halos
+        #his = np.sort(his) # sort to slice dask array more efficiently
 
-        self.randoms = {}
-        self.randoms['z'] = rand['z'][his]
-        self.randoms['ra'] = rand['ra'][his]
-        self.randoms['dec'] = rand['dec'][his]
+        #self.randoms = {}
+        #self.randoms['z'] = rand['z'][his]
+        #self.randoms['ra'] = rand['ra'][his]
+        #self.randoms['dec'] = rand['dec'][his]#
 
-        self.randoms = ArrayCatalog(self.randoms)
-        self.randoms['Position'] = transform.SkyToCartesian(self.randoms['ra'], self.randoms['dec'], self.randoms['z'], cosmo=self.cosmo)
-        self.randoms['NZ'] = self.nofz(self.randoms['z'])
+        #self.randoms = ArrayCatalog(self.randoms)
+        #self.randoms['Position'] = transform.SkyToCartesian(self.randoms['ra'], self.randoms['dec'], self.randoms['z'], cosmo=self.cosmo)
+        #self.randoms['NZ'] = self.nofz(self.randoms['z'])
+        
+        total_rand_cat_pos = []
+    
+        zbins = np.linspace(self.minZ*0.95, self.maxZ*1.05, nbins) # slightly higher range to capture endpoints well
+        pos = np.array(self.data['Position'])
+        
+        #Loop over redshift bins and generate sample s.t. nbar_data = alpha * nbar_rand
+        for i in range(nbins-1):
+            
+            z_range_halos = (self.data['z'] >= zbins[i]) & (self.data['z'] <= zbins[i+1])
+            n_in_range = len(self.data['z'][z_range_halos])
+            
+            # if bin non-empty, create uniform sample and add to random catalog
+            if n_in_range > 0:
+                min_pos = np.min(pos[z_range_halos], axis=0)
+                max_pos = np.max(pos[z_range_halos], axis=0)
+    
+                unif_cat_x = np.random.uniform(min_pos[0], max_pos[0], size=int(n_in_range/alpha))
+                unif_cat_y = np.random.uniform(min_pos[1], max_pos[1], size=int(n_in_range/alpha))
+                unif_cat_z = np.random.uniform(min_pos[2], max_pos[2], size=int(n_in_range/alpha))
+
+                total_rand_cat_pos.extend(np.array([unif_cat_x, unif_cat_y, unif_cat_z]).T)
+        
+        # store random catalog as ArrayCatalog
+        self.randoms = ArrayCatalog({'Position':np.array(total_rand_cat_pos)})
+        self.randoms['ra'], self.randoms['dec'], self.randoms['z'] = nbodykit.transform.CartesianToSky(self.randoms['Position'], self.cosmo)
         
         return
     
@@ -368,8 +396,14 @@ class LightCone:
     
     def PaintMesh(self):
         # TODO: include completeness weights
-        self.halo_mesh = self.fkp_catalog.to_mesh(Nmesh=self.Nmesh, nbar='NZ', fkp_weight='FKPWeight', BoxSize=self.BoxSize, resampler='tsc', compensated=False)
-        self.halo_momentum_mesh = self.fkp_velocity_catalog.to_mesh(Nmesh=self.Nmesh, nbar='NZ', fkp_weight='FKPWeight', BoxSize=self.BoxSize, resampler='tsc', compensated=False)
+        self.halo_mesh = self.fkp_catalog.to_mesh(Nmesh=self.Nmesh, BoxSize=self.BoxSize, resampler='tsc', compensated=True)
+        self.halo_momentum_mesh = self.fkp_velocity_catalog.to_mesh(Nmesh=self.Nmesh, BoxSize=self.BoxSize, resampler='tsc', compensated=True)
+        
+        use_cart_grid = False
+        if use_cart_grid:
+            array_cat = ArrayCatalog({'Position': self.data['Position'], 'Vz': self.data['Vz'] }, BoxSize=self.BoxSize, Nmesh=self.Nmesh)
+            self.halo_mesh = array_cat.to_mesh()
+            self.halo_momentum_mesh = array_cat.to_mesh(value='Vz')
         return
     
     def CalculateMultipoles(self, poles=[0, 2, 4], kmin=0.0, kmax=0.3, dk=5e-3):
