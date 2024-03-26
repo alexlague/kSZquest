@@ -51,7 +51,7 @@ class LightCone:
 
     def LoadGalaxies(self, SimDir, SimType, GenerateRand=False, z_min=0.0, z_max=5.0, ra_min=-180, ra_max=180, dec_min=-90, dec_max=90, alpha=0.1, Offset=0, Downsample=1):
         '''
-        Implemented SimTypes: Magneticum, Sehgal, WebSky and numpy
+        Implemented SimTypes: Magneticum, Sehgal, WebSky, numpy, and Nseries
         '''
         
         self.alpha = alpha
@@ -198,7 +198,10 @@ class LightCone:
             self.data['Position'] = np.array([x[ind], y[ind], z[ind]]).T
             self.data['Vz'] = vrad[ind]
             self.data['M200m'] = M200m[ind]
-
+        
+        elif SimType == 'Nseries':
+            pass
+            
         else:
             raise Exception("Simulation type not implemented")
         
@@ -397,7 +400,9 @@ class LightCone:
     def PaintMesh(self):
         # TODO: include completeness weights
         self.halo_mesh = self.fkp_catalog.to_mesh(Nmesh=self.Nmesh, BoxSize=self.BoxSize, resampler='tsc', compensated=True)
-        self.halo_momentum_mesh = self.fkp_velocity_catalog.to_mesh(Nmesh=self.Nmesh, BoxSize=self.BoxSize, resampler='tsc', compensated=True)
+        
+        if hasattr(self, "fkp_velocity_catalog"):
+            self.halo_momentum_mesh = self.fkp_velocity_catalog.to_mesh(Nmesh=self.Nmesh, BoxSize=self.BoxSize, resampler='tsc', compensated=True)
         
         use_cart_grid = False
         if use_cart_grid:

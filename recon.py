@@ -174,7 +174,7 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None, NSIDE=None):
             # DEBUG: TRY VEC2PIX
             pixels = hp.ang2pix(NSIDE, ras, decs, lonlat=True)  #hp.ang2pix(NSIDE, samples['ra'], samples['dec'], lonlat=True)
             
-            pixels = hp.vec2pix(NSIDE, data_pos[:,0], data_pos[:,1], data_pos[:,2])
+            #pixels = hp.vec2pix(NSIDE, data_pos[:,0], data_pos[:,1], data_pos[:,2])
             T_vals = CMBMap[pixels]
             
             #T_vals = np.repeat(T_vals, N)
@@ -414,6 +414,7 @@ def RunReconstruction(Source, CMBMap, ClMap=None, RA=None, DEC=None, NSIDE=None,
 
     vhat[delta_e_times_T==0] = 0. # electron velocity undefined where there are no electrons
     #vhat[Source.halo_mesh.to_field()==0.] = 0.
+    print(np.max(T_grid))
 
     vhat_at_halos   = PaintedVelocities(Source, vhat)
     vhat_fkp_mesh   = ReconstructedVelocityMesh(Source, vhat_at_halos)

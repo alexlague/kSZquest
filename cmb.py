@@ -4,6 +4,7 @@ import numpy as np
 from pixell import enmap, utils
 from scipy.interpolate import interp1d
 import camb
+import healpy as hp
 
 class CMBMap:
     
@@ -153,13 +154,19 @@ class CMBMap:
             cltt = self.cltt
         else:
             self.CalculateTheoryCls()
+
+        # if pixell map
+        if self.kSZ_map.ndim == 2:
+            shape, wcs = self.GenerateMapTemplate()
         
-        shape, wcs = self.GenerateMapTemplate()
+            ps = self.cltt
+            ps[:2] = 0.
+            primary_cmb = enmap.rand_map(shape, wcs, ps[None,None])
         
-        ps = self.cltt
-        ps[:2] = 0.
-        primary_cmb = enmap.rand_map(shape, wcs, ps[None,None])
-        
+        # if healpy map
+        else:
+            primary_cmb = hp.sphtfunc.synfast(self.cltt, self.NSIDE)
+            
         self.primary_cmb_map = primary_cmb
         
         return
@@ -220,32 +227,49 @@ class CMBMap:
         # Convolve with beam
         if hasattr(self, "beam"):
             self.combined_cmb_map = enmap.smooth_gauss(self.combined_cmb_map, self.beam)
+
+        if self.kSZ_map.ndim == 2:    
+            ps = self.cltotal
+            fl = 1./ps
+            fl[np.isnan(fl)] = 0.
+            fl[np.isinf(fl)] = 0.
+            fl = fl / np.max(fl) # easier to filter if normalized
+        
+            imap = self.combined_cmb_map
+            kmap = enmap.fft(imap, normalize="phys")
+
+            modlmap = enmap.modlmap(imap.shape, imap.wcs)
+            modlmap = (imap).modlmap()
             
-        ps = self.cltotal
-        fl = 1./ps
-        fl[np.isnan(fl)] = 0.
-        fl[np.isinf(fl)] = 0.
-        fl = fl / np.max(fl) # easier to filter if normalized
+            fl2d = interp1d(self.ls, fl, bounds_error=False, fill_value=0)(modlmap)
+            kfiltered = kmap*fl2d
+            filtered = enmap.ifft(kfiltered, normalize="phys").real
         
-        imap = self.combined_cmb_map
-        kmap = enmap.fft(imap, normalize="phys")
-
-        modlmap = enmap.modlmap(imap.shape, imap.wcs)
-        modlmap = (imap).modlmap()
-
-        fl2d = interp1d(self.ls, fl, bounds_error=False, fill_value=0)(modlmap)
-        kfiltered = kmap*fl2d
-        filtered = enmap.ifft(kfiltered, normalize="phys").real
-        
+        else:
+            ps = self.cltotal
+            fl = np.zeros(len(ps))
+            fl[2:] = 1. / ps[2:]
+            #fl[np.isnan(fl)] = 0.
+            #fl[~np.isfinite(fl)] = 0.
+            fl = fl / np.max(fl) # easier to filter if normalized
+            
+            print("filter: ", fl)
+            
+            alms = hp.sphtfunc.map2alm(self.combined_cmb_map)
+            filtered_alms = hp.sphtfunc.almxfl(alms, fl)
+            filtered = hp.sphtfunc.alm2map(filtered_alms, self.NSIDE)
+            
         self.filtered_cmb_map = filtered
         
+        if self.kSZ_map.ndim == 2:
+            # integrand for noise computation
+            one_over_cl_map = fl2d*kmap/kmap
+            one_over_cl_map[np.isnan(one_over_cl_map)] = 0
+            one_over_cl_map_ifft = enmap.ifft(one_over_cl_map, normalize="phys").real
+            self.one_over_cl_map = fl2d * one_over_cl_map_ifft
+        else: 
+            self.one_over_cl_map = 0.
         
-        # integrand for noise computation
-        one_over_cl_map = fl2d*kmap/kmap
-        one_over_cl_map[np.isnan(one_over_cl_map)] = 0
-        one_over_cl_map_ifft = enmap.ifft(one_over_cl_map, normalize="phys").real
-        self.one_over_cl_map = fl2d * one_over_cl_map_ifft
-
         return
     
     @property
