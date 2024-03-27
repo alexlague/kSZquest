@@ -106,7 +106,8 @@ class CMBMap:
         
         self.ls = ls
         self.cltt = cltt
-        
+        self.cltt[np.isnan(self.cltt)] = 0.
+
         return
     
     def GenerateMapTemplate(self):
