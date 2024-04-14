@@ -19,7 +19,7 @@ class CMBMap:
                  NSIDE=None,
                  noise_lvl=None, 
                  theta_FWHM=None, 
-                 beam=None):
+                 do_beam=False):
         '''
         CMB Map storing data about microwave sky in
         pixell format
@@ -31,7 +31,7 @@ class CMBMap:
         min/max RA/DEC: corners of the map in degrees
         noise_lvl: noise of CMB instrument in muK arcmin (needed only if generating noise map)
         theta_FWHM: in arcmin (optional for noise computation)
-        beam: beam of the CMB instrument (needed only if convolving with beam)
+        do_beam: True if smoothing map with beam of the CMB instrument which is specified by theta_FWHM
         '''
         
         
@@ -47,8 +47,7 @@ class CMBMap:
             self.noise_lvl = noise_lvl
         if theta_FWHM != None:
             self.theta_FWHM = theta_FWHM
-        if beam != None:
-            self.beam
+        self.do_beam = do_beam
 
         # transform numpy array to enmap
         if kSZMap.ndim == 2:
@@ -97,7 +96,7 @@ class CMBMap:
         powers = results.get_cmb_power_spectra(pars, CMB_unit='muK')
         totCL  = powers['total']
         ls     = np.arange(totCL.shape[0])
-        cltt = totCL[:,0] / 1e12 / (ls*(ls+1)/2/np.pi)
+        cltt = totCL[:,0] / (ls*(ls+1)/2/np.pi)
         
         cltt = cltt[ls<=self.LMAX]
         ls = ls[ls<=self.LMAX]
@@ -123,8 +122,11 @@ class CMBMap:
         RA_range = self.maxRA - self.minRA # deg
         DEC_range = self.maxDEC - self.minDEC # deg
         
-        if RA_range == 0. or DEC_range == 0.:
-            raise Exception("Invalid angular min/max")
+        if RA_range == 0.:
+            RA_range = 360
+        if DEC_range == 0.:
+            DEC_range = 180
+        #    raise Exception("Invalid angular min/max")
         
         center = (self.minRA + RA_range/2, self.minDEC + DEC_range/2)
         
@@ -177,21 +179,27 @@ class CMBMap:
         '''
         if (hasattr(self, "noise_lvl") and hasattr(self, "theta_FWHM")):
         
-            self.theta_FWHM *= np.pi / (60*180) # to radians
+            beam = self.theta_FWHM * np.pi / (60*180) # to radians
         
             ls = np.arange(self.LMAX+1)
         
-            nltt = (self.noise_lvl* np.pi / (60*180))**2  
-            nltt *= np.exp(ls*(ls+1) * self.theta_FWHM**2/8/np.log(2)) # muK
-            nltt /= 1e12 # K
-            nltt[np.isnan(nltt)] = 0.
-            nltt[np.isinf(nltt)] = 0.
-        
-            self.nltt = nltt
-            ps = nltt
-            shape, wcs = self.GenerateMapTemplate()
-            cmb_noise_map = enmap.rand_map(shape, wcs, ps[None,None])
+            #nltt = (self.noise_lvl* np.pi / (60*180))**2  
+            #nltt *= np.exp(ls*(ls+1) * beam**2/8/np.log(2)) # muK
+            #nltt /= 1e12 # K
+            #nltt[np.isnan(nltt)] = 0.
+            #nltt[np.isinf(nltt)] = 0.
+            nltt = self.noise_lvl / 1e6 # DEBUG
+
+            self.nltt = nltt * np.ones(len(ls))
             
+            if self.kSZ_map.ndim == 2:
+                ps = nltt
+                shape, wcs = self.GenerateMapTemplate()
+                cmb_noise_map = enmap.rand_map(shape, wcs, ps[None,None])
+            
+            else:
+                cmb_noise_map = hp.sphtfunc.synfast(self.nltt, self.NSIDE)
+                
             self.cmb_noise_map = cmb_noise_map
         
         else:
@@ -226,15 +234,21 @@ class CMBMap:
         self.CombineMaps()
         
         # Convolve with beam
-        if hasattr(self, "beam"):
-            self.combined_cmb_map = enmap.smooth_gauss(self.combined_cmb_map, self.beam)
+        if self.do_beam:
+            beam = self.theta_FWHM * np.pi / (60*180) # to radians
+            if self.kSZ_map.ndim == 2:
+                self.combined_cmb_map = enmap.smooth_gauss(self.combined_cmb_map, beam)
+            elif self.kSZ_map.ndim == 1:
+                self.combined_cmb_map = hp.sphtfunc.smoothing(self.combined_cmb_map, beam)
 
+        ps = self.cltotal
+        fl = np.zeros(ps.shape)
+        fl[2:] = 1. / ps[2:]
+        
         if self.kSZ_map.ndim == 2:    
-            ps = self.cltotal
-            fl = 1./ps
-            fl[np.isnan(fl)] = 0.
-            fl[np.isinf(fl)] = 0.
-            fl = fl / np.max(fl) # easier to filter if normalized
+            #fl[np.isnan(fl)] = 0.
+            #fl[np.isinf(fl)] = 0.
+            #fl = fl / np.max(fl) # easier to filter if normalized
         
             imap = self.combined_cmb_map
             kmap = enmap.fft(imap, normalize="phys")
@@ -247,14 +261,11 @@ class CMBMap:
             filtered = enmap.ifft(kfiltered, normalize="phys").real
         
         else:
-            ps = self.cltotal
-            fl = np.zeros(len(ps))
-            fl[2:] = 1. / ps[2:]
             #fl[np.isnan(fl)] = 0.
             #fl[~np.isfinite(fl)] = 0.
-            fl = fl / np.max(fl) # easier to filter if normalized
+            #fl = fl / np.max(fl) # easier to filter if normalized
             
-            print("filter: ", fl)
+            #print("filter: ", fl)
             
             alms = hp.sphtfunc.map2alm(self.combined_cmb_map)
             filtered_alms = hp.sphtfunc.almxfl(alms, fl)

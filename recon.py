@@ -357,7 +357,17 @@ def CalculateNoise(Source, Field, FilterDictionary, ClMap=None, RA=None, DEC=Non
     #    
     #else:
     noise_of_k = f_1_of_x.r2c()
-        
+    
+    #ClTT not passed from lightcone object...
+    #if type(Source) == lightcone.LightCone:
+    #    Source.cltt
+    #    one_over_cl_interp = interp1d(np.arange(len(one_over_cl)), one_over_cl, bounds_error=False, fill_value=0.)
+    #    chi_star = Source.comsmo.comoving_distance(Source.zeff) / Source.cosmo.h # to Mpc CHECK kh units!
+    #    ell_for_int = chi_star*model_full[2]['ks']
+    #    integrand = model_full[2]['ks']*model_full[2]['sPge'][2][:,51]**2/model_full[2]['sPggtot'][2][:,51]
+    #    integrand *= one_over_cl_interp(ell_for_int) /2/np.pi
+    #    noise_of_k = np.trapz(integrand, x=model_full[2]['ks'])
+    
     return noise_of_k
 
 def PaintedVelocities(Source, vhat):
