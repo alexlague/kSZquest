@@ -190,7 +190,8 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None, NSIDE=None):
         chis = np.array(Source.cosmo.comoving_distance(redshifts))
         z_weights = chis**2 / (1+redshifts)**2
         z_weights /= np.mean(z_weights)
-        T_rand_cat = ArrayCatalog({'Position':data_pos, 'T': z_weights * T_vals}) # samples
+        #T_rand_cat = ArrayCatalog({'Position':data_pos, 'T': z_weights * T_vals}) # samples
+        T_rand_cat = ArrayCatalog({'Position':data_pos, 'T': T_vals})
         T_rand_array = T_rand_cat.to_mesh(BoxSize=Source.BoxSize, Nmesh=Source.Nmesh, value='T') # (1 + delta_rand) * T
         rand_array = T_rand_cat.to_mesh(BoxSize=Source.BoxSize, Nmesh=Source.Nmesh) # (1 + delta_rand)
 
