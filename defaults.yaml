@@ -1,0 +1,33 @@
+
+# These arguments will be saved to filenames
+jobargs:
+  # Minimum and maxmimum multipoles of the CMB map used
+  lmin: 100
+  lmax: 8000
+
+  # This is only relevant for fitting the white noise level. Probably no need to change this.
+  fit_lmin: 1200
+  fit_lmax: 7000
+
+  # TODO: change to daynight
+  daynight: "night"
+  
+# TODO: change to list of both frequencies
+freqs:
+  - 'f090'
+  #- 'f150'
+
+# This is relevant for making the mask in prepare_cmb.py
+# Inspect the output masked_map.png to make sure this is ok
+rms_threshold: 70.0 # uK-arcmin
+  
+
+# Change these paths; these can be shared on a cluster
+paths:
+  act_root: "/data5/act/maps/dr5/"
+  planck_root: "/data5/planck/pr3/"
+  act_sim_root: "/data5/sims/v0.4/"
+
+  # WARNING: change these to your own local copy
+  out_dir:  "/data5/depot/ksz/"
+

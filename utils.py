@@ -1,37 +1,24 @@
-import paths
 from orphics import maps,io,cosmology,stats
 from pixell import enmap,curvedsky as cs,reproject,bunch
 import numpy as np
 from scipy.optimize import curve_fit
 
-defaults = bunch.Bunch({})
-
-# Minimum and maxmimum multipoles of the CMB map used
-defaults.lmin = 100
-defaults.lmax = 8000
-
-# This is only relevant for fitting the white noise level. Probably no need to change this.
-defaults.fit_lmin = 1200
-defaults.fit_lmax = 7000
-
-# TODO: change to list of both frequencies
-#freqs = ['f090','f150']
-freqs = ['f090']
+defaults = bunch.Bunch(io.config_from_yaml("defaults_local.yaml"))
+jobargs = bunch.Bunch(defaults.jobargs)
+paths = bunch.Bunch(defaults.paths)
 
 def act_file(freq):
-    # TODO: change to daynight
-    return f"{paths.act_root}act_planck_dr5.01_s08s18_AA_{freq}_night_map_srcfree.fits"
+    return f"{paths.act_root}act_planck_dr5.01_s08s18_AA_{freq}_{jobargs.daynight}_map_srcfree.fits"
 
 def ivar_file(freq):
-    return f"{paths.act_root}act_planck_dr5.01_s08s18_AA_{freq}_night_ivar.fits"
+    return f"{paths.act_root}act_planck_dr5.01_s08s18_AA_{freq}_{jobargs.daynight}_ivar.fits"
 
 def wfid(freq):
     return {'f090':50.0,'f150':30.}[freq]
 
 def get_beam(freq):
     # Warning: this doesn't check that delta_ell=1, which is assumed elsewhere
-    # TODO: change to daynight
-    beam_file = f"{paths.act_root}beams/act_planck_dr5.01_s08s18_{freq}_night_beam.txt"
+    beam_file = f"{paths.act_root}beams/act_planck_dr5.01_s08s18_{freq}_{jobargs.daynight}_beam.txt"
 
     # Load beam and normalize it
     ls,bells = np.loadtxt(beam_file,unpack=True)
@@ -98,13 +85,17 @@ def get_single_frequency_alms(imap, gmask,ls,bells,fit_lmin,fit_lmax,lmin,lmax,w
 
     # Filter
     falm = cs.almxfl(alm,decon_filter)
+    fcls = cs.alm2cl(falm)
 
     if debug:
-        fcls = cs.alm2cl(falm)
         pl = io.Plotter('Cell')
         pl.add(ells,dcltt,label='empirical power')
         pl.add(ells,(theory_filter**2.) * (cltt*bls**2+wnoise)/bls**2.,label='expected filtered power')
         pl.add(ells,fcls/w2,label='filtered power')
         pl.done('empcls.png')
 
-    return alm, falm, ells, theory_filter
+    return alm, falm, ells, theory_filter, wfit, fcls/w2
+
+
+    
+        
