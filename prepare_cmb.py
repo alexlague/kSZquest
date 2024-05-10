@@ -9,7 +9,31 @@ import utils as kutils
 args = kutils.jobargs # these will be added to filenames
 paths = kutils.paths
 
+<<<<<<< HEAD
 mask_file = f"{paths.out_dir}/planck_galactic_mask_070.fits" # the 070 here refers to 70% fsky
+=======
+# Change this to f150 to run on the 150 GHz map
+freq = "f150"
+
+# This is only relevant for fitting the white noise level. Probably no need to change this.
+fit_lmin = 1200
+fit_lmax = 7000
+
+# This is relevant for making the mask.
+# Inspect the output masked_map.png to make 
+rms_threshold = 70.0
+
+mask_file = f"{kutils.out_dir}/planck_galactic_mask_070.fits"
+act_file = f"{kutils.act_root}/act_planck_dr5.01_s08s18_AA_{freq}_night_map_srcfree.fits"
+ivar_file = f"{kutils.act_root}/act_planck_dr5.01_s08s18_AA_{freq}_night_ivar.fits"
+beam_file = f"{kutils.act_root}/beams/act_planck_dr5.01_s08s18_{freq}_night_beam.txt"
+
+
+# Load and mask map
+imap = enmap.read_map(act_file,sel=np.s_[0,...])
+ivar = enmap.read_map(ivar_file,sel=np.s_[0,...])
+rms = maps.rms_from_ivar(ivar)
+>>>>>>> 710a003 (updated paths for niagara)
 gmask = enmap.read_map(mask_file)
 
 for freq in kutils.defaults.freqs:
