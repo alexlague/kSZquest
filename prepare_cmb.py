@@ -12,7 +12,7 @@ paths = kutils.paths
 mask_file = f"{paths.out_dir}/planck_galactic_mask_070.fits" # the 070 here refers to 70% fsky
 gmask = enmap.read_map(mask_file)
 
-for freq in kutils.defaults.freqs:
+for freq in args.freqs:
     args.freq = freq # add this to the filename
     act_file = kutils.act_file(freq)
     ivar_file = kutils.ivar_file(freq)

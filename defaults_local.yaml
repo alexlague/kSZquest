@@ -13,7 +13,7 @@ jobargs:
   daynight: "night"
   
   # TODO: change to list of both frequencies
-  freqs: "f090"
+  freqs: ["f090"]
   #- 'f150'
 
 # This is relevant for making the mask in prepare_cmb.py

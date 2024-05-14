@@ -19,7 +19,7 @@ gmasks = {}
 beams = {}
 pareas = {}
 for freq in args.freqs:
-    print(freq)
+    print(type(freq))
     ivars[freq] = enmap.read_map(kutils.ivar_file(freq),sel=np.s_[0,...])
     gmasks[freq] = enmap.read_map(f'{paths.out_dir}/mask_{freq}.fits')
     beams[freq] = kutils.get_beam(freq)
@@ -43,7 +43,7 @@ for task in my_tasks:
         nmap = maps.white_noise(gmasks[freq].shape,gmasks[freq].wcs,wfit)
         imap = cmap + nmap
         
-        alm, falm, ells, theory_filter, wfit, fcls = kutils.get_single_frequency_alms(imap, gmasks[freq],ls,bells,args.fit_lmin,args.fit_lmax,args.lmin,args.lmax,kutils.wfid(args.freqs),debug=False)
+        alm, falm, ells, theory_filter, wfit, fcls = kutils.get_single_frequency_alms(imap, gmasks[freq],ls,bells,args.fit_lmin,args.fit_lmax,args.lmin,args.lmax,kutils.wfid(args.freq),debug=False)
         hp.write_alm(f'{paths.out_dir}/sims/filtered_alms_{sstr}_simid_{index}.fits',falm,overwrite=True)
         io.save_cols(f'{paths.out_dir}/sims/theory_filter_{sstr}_simid_{index}.txt',(ells,theory_filter))
         np.savetxt(f'{paths.out_dir}/sims/fcls_{sstr}_simid_{index}.txt',fcls)
