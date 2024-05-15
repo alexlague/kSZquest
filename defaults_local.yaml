@@ -26,7 +26,8 @@ paths:
   act_root: "/home/r/rbond/alague/scratch/ksz-pipeline/act_data_and_sims/"
   planck_root: "/home/r/rbond/alague/scratch/ksz-pipeline/Planck_data/"
   act_sim_root: "/home/r/rbond/alague/scratch/ksz-pipeline/act_data_and_sims/sims/"
-
+  boss_root: "/home/r/rbond/alague/scratch/ksz-pipeline/BOSS_data/CMASS/"
+  
   # WARNING: change these to your own local copy
   out_dir:  "/home/r/rbond/alague/scratch/ksz-pipeline/ksz-analysis/quadratic_estimator/development_code/prepared_maps/"
-
+  

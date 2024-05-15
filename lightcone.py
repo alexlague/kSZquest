@@ -11,6 +11,7 @@ import dask.dataframe as dd
 import dask.array as da
 import h5py
 import pandas as pd
+import pickle
 import os
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
 
@@ -285,74 +286,9 @@ class LightCone:
 
         return
 
- 
-    def CalculateWindowFunction(self):
-        
-        # Extract data and random positions
-        dp1 = self.data['Position']
-        dw1 = self.fkp_catalog['data/FKPWeight']
-        rp1 = self.randoms['Position']
-        rw1 = self.fkp_catalog['randoms/FKPWeight']
-        box = np.array(self.BoxSize) * 1.05
-        ked = np.linspace(0., 0.1, 21)
-
-        # Compute reference pk from pypower
-        ref = CatalogFFTPower(data_positions1=dp1, data_weights1=dw1, randoms_positions1=rp1, randoms_weights1=rw1, edges=ked, ells=(0, 2, 4), boxsize=box, nmesh=128, resampler='tsc', interlacing=2, los='firstpoint', position_type='pos', mpiroot=0,)
-        
-        # Compute window of survey in Fourier space
-        Wk = smooth_window.CatalogSmoothWindow(randoms_positions1=np.array(rp1).T, randoms_weights1=np.array(rw1), power_ref=ref)
-        
-        # Inverse Fourier transform
-        sep = np.geomspace(1e-2, 8e3, 2048)
-        Ws =  Wk.poles.to_real(sep=sep)
-        
-        # Store interpolated configuration space normalized window
-        self.window = InterpolatedUnivariateSpline(Ws.sep, Ws(proj=0)/Ws(proj=0)[0])
-        
-        return
-
-    def DeconvolveWindowFunction(self):
-        
-        if ~hasattr(self, "window"):
-            self.CalculateWindowFunction()
-        
-        def deconv_window(r, v):
-            rr = sum(ri ** 2 for ri in r) # r^2 on the mesh
-            rr[rr == 0] = 1
-            return v / np.sqrt(self.window(np.sqrt(rr))) # divide the mesh by W(r) (window is W^2)
-
-        # apply the filter and get a new mesh
-        self.halo_mesh = self.halo_mesh.apply(deconv_window, mode='real', kind='relative').to_field()
-        self.halo_momentum_mesh = self.halo_momentum_mesh.apply(deconv_window, mode='real', kind='relative').to_field()
-        
-        return
 
     def GenerateRandoms(self, alpha=0.1, nbins=100):
         
-        # OLD METHOD
-        #rand = RandomCatalog(int(4*len(self.data)/alpha))
-        #rand['z']   = rand.rng.uniform(low=self.minZ, high=self.maxZ)
-        #rand['ra']  = rand.rng.uniform(low=self.minRA, high=self.maxRA)
-        #rand['dec'] = rand.rng.uniform(low=self.minDEC, high=self.maxDEC)
-        
-        # Subselect z to match nofz from data
-        #h_indexes = np.arange(len(rand['z']))
-        #hzs = rand['z']
-        #dist = abs(self.nofz(hzs))*self.cosmo.comoving_distance(hzs)**1.5 # distribution
-        #dist /= np.sum(dist) # normalized
-        #Nrand =  self.data.csize / alpha
-
-        #his = np.random.choice(h_indexes, size=int(Nrand), p=dist, replace=False) # indexes of selected halos
-        #his = np.sort(his) # sort to slice dask array more efficiently
-
-        #self.randoms = {}
-        #self.randoms['z'] = rand['z'][his]
-        #self.randoms['ra'] = rand['ra'][his]
-        #self.randoms['dec'] = rand['dec'][his]#
-
-        #self.randoms = ArrayCatalog(self.randoms)
-        #self.randoms['Position'] = transform.SkyToCartesian(self.randoms['ra'], self.randoms['dec'], self.randoms['z'], cosmo=self.cosmo)
-        #self.randoms['NZ'] = self.nofz(self.randoms['z'])
         
         total_rand_cat_pos = []
     
@@ -415,28 +351,36 @@ class LightCone:
         self.r = ConvolvedFFTPower(self.halo_mesh, poles=poles, dk=dk, kmin=kmin, kmax=kmax).poles
         return
 
-    def GetPowerSpectraModel(self):
-        nzbins = 5
-        ls = np.arange(1000)
+    def GetPowerSpectraModel(self, LoadFile=None):
+
         zs = np.linspace(self.minZ, self.maxZ, nzbins)
-        #Delta_chi = self.cosmo.comoving_distance(self.maxZ) - self.cosmo.comoving_distance(self.minZ)
-        #vol = 4 * np.pi/3 * self.FSKY * (Delta_chi/self.cosmo.h)**3
-        #vol /= 1000**3 # to Gpc^3
-        vol = 100 # low enough kmin for interpolation
-        ngals = self.nofz(zs) * self.cosmo.h**3 # to 1/Mpc^3
-
-        if hasattr(self, "bg"):
-            bgs = self.bg * np.ones(len(zs)) #* self.cosmo.h**3 # TODO moe h^3 correction to bg
-        else:
-            bgs = None
+        if LoadFile is None:
+            nzbins = 5
+            ls = np.arange(1000)
+            #Delta_chi = self.cosmo.comoving_distance(self.maxZ) - self.cosmo.comoving_distance(self.minZ)
+            #vol = 4 * np.pi/3 * self.FSKY * (Delta_chi/self.cosmo.h)**3
+            #vol /= 1000**3 # to Gpc^3
+            vol = 100 # low enough kmin for interpolation
+            ngals = self.nofz(zs) * self.cosmo.h**3 # to 1/Mpc^3
+            
+            if hasattr(self, "bg"):
+                bgs = self.bg * np.ones(len(zs)) #* self.cosmo.h**3 # TODO moe h^3 correction to bg
+            else:
+                bgs = None
         
-        #model = get_ksz_auto_squeezed(ells=ls, volume_gpc3=vol, zs=zs, ngals_mpc3=ngals, params=self.CosmoParams, template=True, rsd=True, bgs=bgs)
-        model = get_ksz_auto_squeezed(ells=ls, volume_gpc3=vol, zs=zs, ngals_mpc3=None, params=self.CosmoParams, template=True, rsd=True, bgs=bgs)
+            #model = get_ksz_auto_squeezed(ells=ls, volume_gpc3=vol, zs=zs, ngals_mpc3=ngals, params=self.CosmoParams, template=True, rsd=True, bgs=bgs)
+            model = get_ksz_auto_squeezed(ells=ls, volume_gpc3=vol, zs=zs, ngals_mpc3=None, params=self.CosmoParams, template=True, rsd=True, bgs=bgs)
        
-        self.model = model[2]
+            self.model = model[2]
 
-        print(self.model.keys())
+        else:
+            # load pre-computed model
+            with open(LoadFile, 'rb') as handle:
+                self.model = pickle.load(handle)
+
+        #print(self.model.keys())
         # Getting Pkmu at zeff
+        
         mus = np.linspace(-1, 1, len(self.model['lPggtot'][0, 0, :]))
         Pge_kmu_interp = RegularGridInterpolator((zs, self.model['ks'], mus), self.model['sPge'], bounds_error=False, fill_value=0.)
         Pgg_kmu_interp = RegularGridInterpolator((zs, self.model['ks'], mus), self.model['lPggtot'], bounds_error=False, fill_value=0.)

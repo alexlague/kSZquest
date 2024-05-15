@@ -1,0 +1,107 @@
+# Compute hmvec model for Pge
+# and fit Pggtot with fiducial values
+# to avoid recomputing at every step
+
+import numpy as np
+from orphics import io
+from nbodykit.lab import *
+import nbodykit
+from scipy.interpolate import CubicSpline, RegularGridInterpolator
+import pickle
+import sys
+sys.path.append('../repo/kSZquest/')
+
+import lightcone
+#import cmb
+#import recon
+
+import utils as kutils
+args = kutils.jobargs
+paths = kutils.paths
+
+
+## LOAD LSS DATA ##
+BOSS_file = 'pre-recon/cmass/galaxy_DR12v5_CMASS_North_t2.txt'
+#BOSS_rand = 'pre-recon/cmass/random0_DR12v5_CMASS_North_t1.txt'
+
+f = 0.762
+b = 1.92
+z_min = 0.43
+z_max = 0.7
+z_eff = 0.55
+
+data = np.loadtxt(paths.boss_root+BOSS_file)
+zsel = (data[:,2] >= z_min) & (data[:,2] <= z_max)
+data = data[zsel]
+
+#data_FKP = data[:,4]
+#data_comp = data[:,5] + data[:,6] - 1  #(WEIGHT_CP+WEIGHT_NOZ-1)
+#data_recon = np.loadtxt(BOSS_dir+BOSS_recon)
+#data_recon = data_recon[zsel]
+
+#rand = np.loadtxt(BOSS_dir+BOSS_rand)
+#zsel_rand = (rand[:,2] >= z_min) & (rand[:,2] <= z_max)
+#rand = rand[zsel_rand]
+#rand_FKP = rand[:,4]
+
+# the fiducial BOSS DR12 cosmology
+#cosmo = cosmology.Cosmology(h=0.676).match(Omega0_m=0.31)
+'''
+# export to ArrayCatalog
+data_cat = ArrayCatalog({'RA':data[:,0], 'DEC':data[:,1], 'Z':data[:,2]})
+rand_cat = ArrayCatalog({'RA':rand[:,0], 'DEC':rand[:,1], 'Z':rand[:,2]})
+
+# add Cartesian position column
+data_cat['Position'] = transform.SkyToCartesian(data_cat['RA'], data_cat['DEC'], data_cat['Z'], cosmo=cosmo)
+rand_cat['Position'] = transform.SkyToCartesian(rand_cat['RA'], rand_cat['DEC'], rand_cat['Z'], cosmo=cosmo)
+
+ACT_SLICE = data_cat['DEC'] <= 23
+ACT_SLICE_RAND = rand_cat['DEC'] <= 23
+
+# Use already loaded data
+lc.data = data_cat[ACT_SLICE]
+lc.randoms = rand_cat[ACT_SLICE_RAND]
+lc.data['NZ'] = data[:,-1][ACT_SLICE]
+lc.randoms['NZ'] = rand[:,-1][ACT_SLICE_RAND]
+
+lc.data['ra'] = data_cat['RA'][ACT_SLICE]
+lc.data['dec'] = data_cat['DEC'][ACT_SLICE]
+lc.data['z'] = data_cat['Z'][ACT_SLICE]
+
+lc.fkp_catalog = FKPCatalog(lc.data, lc.randoms)
+lc.fkp_catalog['data/FKPWeight'] = data[:,3][ACT_SLICE]
+lc.fkp_catalog['randoms/FKPWeight'] = rand[:,3][ACT_SLICE_RAND]
+'''
+nz = data[:,7]
+
+# smooth n(z)
+nbins = 200
+zbin_edges = np.linspace(z_min, z_max, nbins+1)
+zbins = np.linspace(z_min, z_max, nbins)
+nz_z = np.zeros(nbins)
+redshifts = data[:,2]
+for i in range(nbins):
+    ind = (redshifts >= zbin_edges[i]) & (redshifts <= zbin_edges[i+1])
+    nz_z[i] = np.mean(nz[ind])
+    
+
+FSKY = 0.1 # shouldn't matter CHECK
+Nmesh = 256
+
+# Initialize lightcone object
+lc = lightcone.LightCone(FSKY, Nmesh=Nmesh)
+
+lc.minZ = z_min
+lc.maxZ = z_max
+lc.nofz = CubicSpline(zbins, nz_z)
+#lc.BoxSize = np.max(data_positions, axis=0) - np.min(data_positions, axis=0)
+
+# Compute model
+lc.bg = b
+lc.GetPowerSpectraModel()
+
+# Save output
+fiducial = lc.model
+
+with open(paths.out_dir + 'cmass_fiducial_model.pkl', 'wb') as fp:
+    pickle.dump(fiducial, fp, protocol=pickle.HIGHEST_PROTOCOL)
