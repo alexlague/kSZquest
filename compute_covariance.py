@@ -27,6 +27,7 @@ cosmo = cosmology.Cosmology(h=0.676).match(Omega0_m=0.31)
 freq = 'f090'
 NSIDE = 2048
 Nmesh = 256
+Nkeep = 10 # keep only the N points in the largest scales (to avoid nans)
 
 # rand catalog the same for every mock
 
@@ -161,7 +162,7 @@ def run_pipeline(imock):
 
     kedges = np.linspace(0, 0.2, 26)
     Ncmbsims = 9
-    poles_array = np.zeros((len(kedges)-1, Ncmbsims)).T
+    poles_array = np.zeros((Nkeep, Ncmbsims)).T
 
     # collect lss and cmb data
     lc, vel_weights = load_galaxy_mock(imock)
@@ -199,22 +200,22 @@ def run_pipeline(imock):
                                     position_type='pos',
                                     dtype='f4').poles
 
-        poles_array[jcmbsim-1] =  poles_vgr(ell=1, complex=False)
+        pk = poles_vgr(ell=1, complex=False)
+        poles_array[jcmbsim-1] =  pk[:Nkeep] # keep only large scales
         
     return poles_array
 
 
 ## RUN MAIN CODE ##
-#pgv_array = []
 
 from multiprocessing import Pool
 
-with Pool(8) as p:
-    pgv_array = p.map(run_pipeline, range(1, 21))
+with Pool(16) as p:
+    pgv_array = p.map(run_pipeline, range(1, 33))
 
-cov_matrix = np.cov(np.array(pgv_array, dtype=np.float32).reshape(25, -1))
-np.savetxt(paths.out_dir + "Pgv_ell_1_NGC_f090_cov_mat.dat")
+cov_matrix = np.cov(np.array(pgv_array, dtype=np.float32).reshape(Nkeep, -1))
+np.savetxt(paths.out_dir + "Pgv_ell_1_NGC_f090_cov_mat.dat", cov_matrix)
 
-print(np.cov(np.array(pgv_array, dtype=np.float32).reshape(25, -1)).shape)
+print(np.cov(np.array(pgv_array, dtype=np.float32).reshape(Nkeep, -1)).shape)
 
 
