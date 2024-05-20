@@ -352,10 +352,10 @@ class LightCone:
         return
 
     def GetPowerSpectraModel(self, LoadFile=None):
-
+        nzbins = 5
         zs = np.linspace(self.minZ, self.maxZ, nzbins)
+
         if LoadFile is None:
-            nzbins = 5
             ls = np.arange(1000)
             #Delta_chi = self.cosmo.comoving_distance(self.maxZ) - self.cosmo.comoving_distance(self.minZ)
             #vol = 4 * np.pi/3 * self.FSKY * (Delta_chi/self.cosmo.h)**3

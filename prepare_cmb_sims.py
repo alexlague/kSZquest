@@ -19,7 +19,6 @@ gmasks = {}
 beams = {}
 pareas = {}
 for freq in args.freqs:
-    print(type(freq))
     ivars[freq] = enmap.read_map(kutils.ivar_file(freq),sel=np.s_[0,...])
     gmasks[freq] = enmap.read_map(f'{paths.out_dir}/mask_{freq}.fits')
     beams[freq] = kutils.get_beam(freq)
