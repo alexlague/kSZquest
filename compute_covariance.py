@@ -131,8 +131,13 @@ def load_galaxy_mock(imock):
     # Compute model
     fid_model = '/home/r/rbond/alague/scratch/ksz-pipeline/ksz-analysis/quadratic_estimator/development_code/prepared_maps/cmass_fiducial_model.pkl'
     lc.GetPowerSpectraModel(LoadFile=fid_model)
+
+
+    # Pre-compute velocity weights
+    wnorm_v = normalization_from_nbar(lc.data['NZ'])
+    wnorm_gv = (normalization_from_nbar(lc.data['NZ']) * normalization_from_nbar(lc.data['NZ'], data_weights=lc.fkp_catalog['data/FKPWeight']))**0.5
     
-    return lc, vel_weights, #data_cat, rand_cat, vel_weights
+    return lc, vel_weights, wnorm_v, wnorm_gv #data_cat, rand_cat, vel_weights
     
 def load_cmb_mock(jcmbsim):
     
@@ -161,49 +166,58 @@ def load_cmb_mock(jcmbsim):
 def run_pipeline(imock):
 
     kedges = np.linspace(0, 0.2, 26)
-    Ncmbsims = 9
-    poles_array = np.zeros((Nkeep, Ncmbsims)).T
+    #Ncmbsims = 1
+    #poles_array = np.zeros((Nkeep, Ncmbsims))
 
     # collect lss and cmb data
-    lc, vel_weights = load_galaxy_mock(imock)
+    lc, vel_weights, wnorm_v, wnorm_gv = load_galaxy_mock(imock)
     
     # iterate over cmb realizations
-    for jcmbsim in range(1, Ncmbsims+1):
-        filtered_cmb_map = load_cmb_mock(jcmbsim)
+    #for jcmbsim in [imock]: #range(1, Ncmbsims+1):
+    jcmbsim = imock
+    filtered_cmb_map = load_cmb_mock(jcmbsim)
 
-        # main reconstruction step
-        vhat = recon.RunReconstruction(lc, filtered_cmb_map, ComputePower=False, NSIDE=NSIDE)
-        
-        # reverse the nbodykit shuffle
-        vhat = np.roll(np.roll(np.roll(vhat, Nmesh//2, axis=0), Nmesh//2, axis=1), Nmesh//2, axis=2)
-        X = np.linspace(0, 1, Nmesh)
-        vhat_interp = RegularGridInterpolator((X, X, X), vhat)
-        
-        pos_array = np.array(lc.data['Position'])
-        box = np.max(pos_array, axis=0) - np.min(pos_array, axis=0)
-        pos_grid = (pos_array - np.min(pos_array, axis=0)) / box # between 0 and 1
-        vel_grid = vhat_interp(pos_grid) # interpolated velocities
+    # main reconstruction step
+    fil_dir = '/home/r/rbond/alague/scratch/ksz-pipeline/ksz-analysis/quadratic_estimator/'
+    fil_dir += 'development_code/prepared_maps/'
+    fil_path = fil_dir+"theory_filter_daynight_night_fit_lmax_7000_fit_lmin_1200_freq_f090_freqs_['f090']_lmax_8000_lmin_100.txt"
+    prefactor, recon_noise = recon.CalculateNoiseFromFilter(lc, CMBFilterPath=fil_path)
 
-        # compute Pgv
-        poles_vgr = CatalogFFTPower(data_positions1=pos_array,
-                                    data_weights1=vel_grid, #*vel_weights,
-                                    data_positions2=pos_array,
-                                    randoms_positions2=np.array(lc.randoms['Position']),
-                                    randoms_weights2=np.array(lc.fkp_catalog['randoms/FKPWeight']), #rand[:,3],
-                                    data_weights2=np.array(lc.fkp_catalog['data/FKPWeight']), #data[:,3],
-                                    nmesh=256,
-                                    resampler='tsc',
-                                    interlacing=2,
-                                    ells=(0, 1, 2, 4),
-                                    los='firstpoint',
-                                    edges=kedges,
-                                    position_type='pos',
-                                    dtype='f4').poles
+    vhat = recon.RunReconstruction(lc, filtered_cmb_map, ComputePower=False, NSIDE=NSIDE)
+    vhat *= prefactor * 3e5 # to units of km/s by multiplying by c
+    
+    # reverse the nbodykit shuffle
+    vhat = np.roll(np.roll(np.roll(vhat, Nmesh//2, axis=0), Nmesh//2, axis=1), Nmesh//2, axis=2)
+    X = np.linspace(0, 1, Nmesh)
+    vhat_interp = RegularGridInterpolator((X, X, X), vhat)
+    
+    pos_array = np.array(lc.data['Position'])
+    box = np.max(pos_array, axis=0) - np.min(pos_array, axis=0)
+    pos_grid = (pos_array - np.min(pos_array, axis=0)) / box # between 0 and 1
+    vel_grid = vhat_interp(pos_grid) # interpolated velocities
+    
+    # compute Pgv
+    poles_vgr = CatalogFFTPower(data_positions1=pos_array,
+                                data_weights1=vel_grid-np.mean(vel_grid),
+                                data_positions2=pos_array,
+                                randoms_positions2=np.array(lc.randoms['Position']),
+                                randoms_weights2=np.array(lc.fkp_catalog['randoms/FKPWeight']), #rand[:,3],
+                                data_weights2=np.array(lc.fkp_catalog['data/FKPWeight']), #data[:,3],
+                                nmesh=256,
+                                resampler='tsc',
+                                interlacing=2,
+                                ells=(0, 1, 2, 4),
+                                los='firstpoint',
+                                edges=kedges,
+                                position_type='pos',
+                                dtype='f4', wnorm=np.array(wnorm_gv)).poles
 
-        pk = poles_vgr(ell=1, complex=False)
-        poles_array[jcmbsim-1] =  pk[:Nkeep] # keep only large scales
-        
-    return poles_array
+    pk = poles_vgr(ell=1, complex=False)
+    #poles_array[jcmbsim-1] =  pk[:Nkeep] # keep only large scales
+    
+    poles = pk[:Nkeep]
+    
+    return poles
 
 
 ## RUN MAIN CODE ##
@@ -211,11 +225,12 @@ def run_pipeline(imock):
 from multiprocessing import Pool
 
 with Pool(16) as p:
-    pgv_array = p.map(run_pipeline, range(1, 33))
+    pgv_array = p.map(run_pipeline, range(1, 30))
 
-cov_matrix = np.cov(np.array(pgv_array, dtype=np.float32).reshape(Nkeep, -1))
+print(f"Array shape after parallel computation is {np.array(pgv_array).shape}")
+cov_matrix = np.cov(np.array(pgv_array).T)
 np.savetxt(paths.out_dir + "Pgv_ell_1_NGC_f090_cov_mat.dat", cov_matrix)
 
-print(np.cov(np.array(pgv_array, dtype=np.float32).reshape(Nkeep, -1)).shape)
+#print(np.cov(np.array(pgv_array, dtype=np.float32).reshape(Nkeep, -1)).shape)
 
 

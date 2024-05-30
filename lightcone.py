@@ -6,6 +6,7 @@ or generated using an Nbody class
 import numpy as np
 from scipy.interpolate import InterpolatedUnivariateSpline, RegularGridInterpolator
 from scipy.optimize import minimize
+from scipy import constants
 
 import dask.dataframe as dd
 import dask.array as da
@@ -425,28 +426,31 @@ class LightCone:
         
         return
         
-def CalculatePrefactors(self):
-    '''
-    Calculate the K_star and Chi_star which enter the noise and amplitude integrals
-    (adapted from U. Giri's code)
-    '''
-
-    if hasattr(self, "zeff"):
-        redshift = self.zeff
-    else:
-        redshift = (self.minZ + self.maxZ) / 2
+    def CalculatePrefactors(self):
+        '''
+        Calculate the K_star and Chi_star which enter the noise and amplitude integrals
+        (adapted from U. Giri's code)
+        '''
+        
+        if hasattr(self, "zeff"):
+            redshift = self.zeff
+        else:
+            redshift = (self.minZ + self.maxZ) / 2
+            
+        rho_critical = rho_critical = 2.775e11 #self.cosmo.rho_crit(0) # 10^{10} (M_\odot/h) (\mathrm{Mpc}/h)^{-3}
+        omega_b = self.cosmo.Omega_b(0)
+        h = self.cosmo.h
+        Tcmb = 2.7255e6 #self.cosmo.T0_cmb * 1e6 #muK
+        kgtoMsun = 5.0e-31
+        n_e0 = (rho_critical * omega_b) / (1.14*constants.proton_mass*kgtoMsun)
+        mtompc = 3.241e-23
+        sigmaT = constants.physical_constants['Thomson cross section'][0]*mtompc**2
+        x_e = 1.0; exptau = 1.0
+        speed_of_light = constants.speed_of_light/1e3 # km/s
+        
     
-    rho_critical = self.cosmo.rho_crit(0) # 10^{10} (M_\odot/h) (\mathrm{Mpc}/h)^{-3}
-    omega_b = self.cosmo.Omega_b(0)
-    h = self.cosmo.h
-    Tcmb = self.cosmo.T0_cmb * 1e6 #muK
-    n_e0 = (rho_critical * omega_b) / (1.14*constants.proton_mass)
-    sigmaT = constants.physical_constants['Thomson cross section'][0]*mtompc**2
-    x_e = 1.0; exptau = 1.0
-    speed_of_light = constants.speed_of_light/1e3 # km/s
-    
-    
-    self.K_star = self.Tcmb * n_e0 * sigmaT * x_e * exptau #/ speed_of_light not necessary because of units of q field?
-    self.Chi_star = self.cosmo.comoving_distance(redshift) # Mpc/h
-
-    return
+        self.K_star = Tcmb * n_e0 * sigmaT * x_e * exptau #/ speed_of_light not necessary because of units of q field?
+        self.Chi_star = self.cosmo.comoving_distance(redshift) # Mpc/h
+        print(f"K_star = {self.K_star}")
+        print(f"Chi_star = {self.Chi_star}")
+        return

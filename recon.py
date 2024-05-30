@@ -372,7 +372,7 @@ def CalculateNoise(Source, Field, FilterDictionary, ClMap=None, RA=None, DEC=Non
     return noise_of_k
 
 
-def CalculateNoiseFromCls(Source, Cls=None):
+def CalculateNoiseFromFilter(Source, CMBFilterPath=None):
     '''
     Follows the calculation of 1810.13423 Eq. (55)-(56)
     '''
@@ -380,28 +380,33 @@ def CalculateNoiseFromCls(Source, Cls=None):
     if hasattr(Source, "K_star") == False:
         Source.CalculatePrefactors()
 
-    Cls = Cls[2:] # remove monopole and dipole
-    one_over_cl = 1. / Cls
-    one_over_cl_interp = interp1d(np.arange(2, len(one_over_cl)-2), one_over_cl, 
-                              bounds_error=False, 
-                              fill_value=one_over_cl[-1])
-
+    #Cls = Cls[2:] # remove monopole and dipole
+    #one_over_cl = 1. / Cls
+    #one_over_cl_interp = interp1d(np.arange(2, len(one_over_cl)-2), one_over_cl, 
+    #                          bounds_error=False, 
+    #                          fill_value=one_over_cl[-1])
+    
+    # Load filter
+    fil = np.loadtxt(CMBFilterPath)
+    one_over_cl_interp = interp1d(fil[:,0], fil[:,1], bounds_error=False, fill_value=fil[:,1][-1])
+    
     Pge = Source.Pge_kmu
     Pgg = Source.Pgg_kmu
     
     # Assume isotropic noise with mu = 0
-    k_samples = np.geomspace(5e-4, 1, 2000)
+    k_samples = np.geomspace(1e-3, 100, 2000)
     Pge_samples = Pge(k_samples, 0)
     Pgg_samples = Pgg(k_samples, 0)
 
     # Compute integral
     ell_for_int = k_samples * Source.Chi_star
     integrand = k_samples * Pge_samples**2 / Pgg_samples
+    integrand[np.isnan(integrand)] = 0.
     integrand *= one_over_cl_interp(ell_for_int) / 2 / np.pi
     integral = np.trapz(integrand, x=k_samples)
     
     # Nvr
-    noise =  Source.Chi_star**2 / Source.K_star**2 * integral  
+    noise = Source.Chi_star**2 / Source.K_star**2 * integral**-1
 
     # prefactor
     full_prefactor = Source.K_star / Source.Chi_star**2 * noise
