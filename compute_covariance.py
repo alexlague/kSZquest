@@ -24,7 +24,7 @@ paths = kutils.paths
 
 # the fiducial BOSS DR12 cosmology
 cosmo = cosmology.Cosmology(h=0.676).match(Omega0_m=0.31)
-freq = 'f090'
+#freq = 'f090'
 NSIDE = 2048
 Nmesh = 256
 Nkeep = 10 # keep only the N points in the largest scales (to avoid nans)
@@ -66,7 +66,7 @@ def load_galaxy_mock(imock):
 
 
     # extract velocities from reconstructed catalog
-    vel = np.loadtxt(mock_dir + 'recon/bao_reconstructed_velocities_N' + ID + '.dat')
+    #vel = np.loadtxt(mock_dir + 'recon/bao_reconstructed_velocities_N' + ID + '.dat')
 
     # extract n(z) by inverting FKP weights (assuming P0 = 2e4)
     nz = (1. / data[:,3] - 1) / 2e4
@@ -79,14 +79,14 @@ def load_galaxy_mock(imock):
     nz_z = np.zeros(nbins)
     for i in range(nbins):
         ind = (data[:,2] >= zbin_edges[i]) & (data[:,2] <= zbin_edges[i+1])
-        var_vel_z[i] = np.var(vel[ind])
+        #var_vel_z[i] = np.var(vel[ind])
         nz_z[i] = np.mean(nz[ind])
 
     # velocity weights
     P0 = 1e11
-    v2 = CubicSpline(zbins, var_vel_z)(data[:,2])
+    #v2 = CubicSpline(zbins, var_vel_z)(data[:,2])
     n = CubicSpline(zbins, nz_z)(data[:,2])
-    vel_weights = 1./(v2+n*P0)
+    #vel_weights = 1./(v2+n*P0)
 
     # Store data in lightcone object
     
@@ -117,7 +117,7 @@ def load_galaxy_mock(imock):
     lc.fkp_catalog['data/FKPWeight'] = data[:,3][ACT_SLICE]
     lc.fkp_catalog['randoms/FKPWeight'] = rand[:,3][ACT_SLICE_RAND]
 
-    vel_weights = vel_weights[ACT_SLICE]
+    #vel_weights = vel_weights[ACT_SLICE]
 
     lc.minZ = 0.43
     lc.maxZ = 0.7
@@ -137,12 +137,18 @@ def load_galaxy_mock(imock):
     wnorm_v = normalization_from_nbar(lc.data['NZ'])
     wnorm_gv = (normalization_from_nbar(lc.data['NZ']) * normalization_from_nbar(lc.data['NZ'], data_weights=lc.fkp_catalog['data/FKPWeight']))**0.5
     
-    return lc, vel_weights, wnorm_v, wnorm_gv #data_cat, rand_cat, vel_weights
+    return lc, wnorm_v, wnorm_gv #data_cat, rand_cat, vel_weights
     
-def load_cmb_mock(jcmbsim):
+def load_cmb_mock(jcmbsim, freq):
     
     args.freq = freq
     sstr = kutils.save_string(args)
+    
+    if freq != "f090":
+        sstr = sstr.replace("f090", freq)
+    elif freq != "f150":
+        sstr = sstr.replace("f150", freq)
+    
     filtered_alms = hp.fitsfunc.read_alm(paths.out_dir + 'sims/filtered_alms_' + sstr + '_simid_'  + str(jcmbsim)  + '.fits')
     alms = np.zeros((3, len(filtered_alms)), dtype=complex)
     alms[0] = filtered_alms
@@ -163,24 +169,29 @@ def load_cmb_mock(jcmbsim):
     return ksz_lc.kSZ_map
 
 
-def run_pipeline(imock):
+def run_pipeline(imock, freq):
+    '''
+    Run the analysis pipeline on the mock catalogs and CMB maps
+    imock: index of the mock catalog/cmb sim
+    freq: frequency of 'f090' or 'f150' to compute cross-covariance
+    '''
 
     kedges = np.linspace(0, 0.2, 26)
     #Ncmbsims = 1
     #poles_array = np.zeros((Nkeep, Ncmbsims))
 
     # collect lss and cmb data
-    lc, vel_weights, wnorm_v, wnorm_gv = load_galaxy_mock(imock)
+    lc, wnorm_v, wnorm_gv = load_galaxy_mock(imock)
     
     # iterate over cmb realizations
     #for jcmbsim in [imock]: #range(1, Ncmbsims+1):
     jcmbsim = imock
-    filtered_cmb_map = load_cmb_mock(jcmbsim)
+    filtered_cmb_map = load_cmb_mock(jcmbsim, freq)
 
     # main reconstruction step
     fil_dir = '/home/r/rbond/alague/scratch/ksz-pipeline/ksz-analysis/quadratic_estimator/'
     fil_dir += 'development_code/prepared_maps/'
-    fil_path = fil_dir+"theory_filter_daynight_night_fit_lmax_7000_fit_lmin_1200_freq_f090_freqs_['f090']_lmax_8000_lmin_100.txt"
+    fil_path = fil_dir+"theory_filter_daynight_night_fit_lmax_7000_fit_lmin_1200_freq_"+freq+"_freqs_['"+freq+"']_lmax_8000_lmin_100.txt"
     prefactor, recon_noise = recon.CalculateNoiseFromFilter(lc, CMBFilterPath=fil_path)
 
     vhat = recon.RunReconstruction(lc, filtered_cmb_map, ComputePower=False, NSIDE=NSIDE)
@@ -223,14 +234,30 @@ def run_pipeline(imock):
 ## RUN MAIN CODE ##
 
 from multiprocessing import Pool
+from functools import partial
 
-with Pool(16) as p:
-    pgv_array = p.map(run_pipeline, range(1, 30))
+with Pool(25) as p:
+    run_pipeline_f090 = partial(run_pipeline, freq='f090')
+    run_pipeline_f150 = partial(run_pipeline, freq='f150')
+    pgv_array_f090 = p.map(run_pipeline_f090, range(1, 100))
+    pgv_array_f150 = p.map(run_pipeline_f150, range(1, 100))
 
-print(f"Array shape after parallel computation is {np.array(pgv_array).shape}")
-cov_matrix = np.cov(np.array(pgv_array).T)
-np.savetxt(paths.out_dir + "Pgv_ell_1_NGC_f090_cov_mat.dat", cov_matrix)
+print(f"Array shape after parallel computation is {np.array(pgv_array_f090).shape}")
 
+cov_matrix_f090 = np.cov(np.array(pgv_array_f090).T)
+cov_matrix_f150 = np.cov(np.array(pgv_array_f150).T)
+
+np.savetxt(paths.out_dir + "Pgv_ell_1_NGC_f090_array.dat", np.array(pgv_array_f090).T)
+np.savetxt(paths.out_dir + "Pgv_ell_1_NGC_f150_array.dat", np.array(pgv_array_f150).T)
+
+np.savetxt(paths.out_dir + "Pgv_ell_1_NGC_f090_cov_mat.dat", cov_matrix_f090)
+np.savetxt(paths.out_dir + "Pgv_ell_1_NGC_f150_cov_mat.dat", cov_matrix_f150)
+
+pgv_array_full = np.concatenate((np.array(pgv_array_f090).T, np.array(pgv_array_f150).T))
+print(f"Array shape after concatenation is {np.array(pgv_array_full).shape}")
+
+cov_matrix_full = np.cov(np.array(pgv_array_full))
+np.savetxt(paths.out_dir + "Pgv_ell_1_NGC_full_cov_mat.dat", cov_matrix_full)
+
+print(f"Final covariance matrix shape is {cov_matrix_full.shape}")
 #print(np.cov(np.array(pgv_array, dtype=np.float32).reshape(Nkeep, -1)).shape)
-
-
