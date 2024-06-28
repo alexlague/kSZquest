@@ -26,8 +26,8 @@ paths = kutils.paths
 cosmo = cosmology.Cosmology(h=0.676).match(Omega0_m=0.31)
 #freq = 'f090'
 NSIDE = 2048
-Nmesh = 256
-Nkeep = 10 # keep only the N points in the largest scales (to avoid nans)
+Nmesh = 512
+Nkeep = 6 # keep only the N points in the largest scales (to avoid nans)
 
 # rand catalog the same for every mock
 
@@ -114,7 +114,7 @@ def load_galaxy_mock(imock):
     lc.data['Position'] = data_cat['Position'][ACT_SLICE]
 
     lc.fkp_catalog = FKPCatalog(lc.data, lc.randoms)
-    lc.fkp_catalog['data/FKPWeight'] = data[:,3][ACT_SLICE]
+    lc.fkp_catalog['data/FKPWeight'] = (data[:,3] * data[:,4])[ACT_SLICE]
     lc.fkp_catalog['randoms/FKPWeight'] = rand[:,3][ACT_SLICE_RAND]
 
     #vel_weights = vel_weights[ACT_SLICE]
@@ -134,10 +134,12 @@ def load_galaxy_mock(imock):
 
 
     # Pre-compute velocity weights
-    wnorm_v = normalization_from_nbar(lc.data['NZ'])
-    wnorm_gv = (normalization_from_nbar(lc.data['NZ']) * normalization_from_nbar(lc.data['NZ'], data_weights=lc.fkp_catalog['data/FKPWeight']))**0.5
+    wnorm_v = normalization_from_nbar(lc.data['NZ'], data_weights=data[:,4][ACT_SLICE])
+    wnorm_gv = (normalization_from_nbar(lc.data['NZ'], data_weights=data[:,4][ACT_SLICE]) * normalization_from_nbar(lc.data['NZ'], data_weights=lc.fkp_catalog['data/FKPWeight']))**0.5
     
-    return lc, wnorm_v, wnorm_gv #data_cat, rand_cat, vel_weights
+    comp_weights = data[:,4][ACT_SLICE]
+
+    return lc, wnorm_v, wnorm_gv, comp_weights
     
 def load_cmb_mock(jcmbsim, freq):
     
@@ -176,12 +178,12 @@ def run_pipeline(imock, freq):
     freq: frequency of 'f090' or 'f150' to compute cross-covariance
     '''
 
-    kedges = np.linspace(0, 0.2, 26)
+    kedges = np.linspace(0, 0.2, 51) #np.linspace(0, 0.2, 17)  #np.linspace(0, 0.2, 26)
     #Ncmbsims = 1
     #poles_array = np.zeros((Nkeep, Ncmbsims))
 
     # collect lss and cmb data
-    lc, wnorm_v, wnorm_gv = load_galaxy_mock(imock)
+    lc, wnorm_v, wnorm_gv, comp_weights = load_galaxy_mock(imock)
     
     # iterate over cmb realizations
     #for jcmbsim in [imock]: #range(1, Ncmbsims+1):
@@ -190,8 +192,9 @@ def run_pipeline(imock, freq):
 
     # main reconstruction step
     fil_dir = '/home/r/rbond/alague/scratch/ksz-pipeline/ksz-analysis/quadratic_estimator/'
-    fil_dir += 'development_code/prepared_maps/'
-    fil_path = fil_dir+"theory_filter_daynight_night_fit_lmax_7000_fit_lmin_1200_freq_"+freq+"_freqs_['"+freq+"']_lmax_8000_lmin_100.txt"
+    fil_dir += 'development_code/prepared_maps/sims/'
+    prefix = "theory_filter_daynight_night_fit_lmax_7000_fit_lmin_1200_freq_"
+    fil_path = fil_dir + prefix + freq + "_freqs_['" + freq + "']_lmax_8000_lmin_100_simid_" + str(jcmbsim) + ".txt"
     prefactor, recon_noise = recon.CalculateNoiseFromFilter(lc, CMBFilterPath=fil_path)
 
     vhat = recon.RunReconstruction(lc, filtered_cmb_map, ComputePower=False, NSIDE=NSIDE)
@@ -206,10 +209,11 @@ def run_pipeline(imock, freq):
     box = np.max(pos_array, axis=0) - np.min(pos_array, axis=0)
     pos_grid = (pos_array - np.min(pos_array, axis=0)) / box # between 0 and 1
     vel_grid = vhat_interp(pos_grid) # interpolated velocities
+    vel_grid -= np.mean(vel_grid)
     
     # compute Pgv
     poles_vgr = CatalogFFTPower(data_positions1=pos_array,
-                                data_weights1=vel_grid-np.mean(vel_grid),
+                                data_weights1=(vel_grid-np.mean(vel_grid))*comp_weights,
                                 data_positions2=pos_array,
                                 randoms_positions2=np.array(lc.randoms['Position']),
                                 randoms_weights2=np.array(lc.fkp_catalog['randoms/FKPWeight']), #rand[:,3],
@@ -236,7 +240,7 @@ def run_pipeline(imock, freq):
 from multiprocessing import Pool
 from functools import partial
 
-with Pool(25) as p:
+with Pool(10) as p:
     run_pipeline_f090 = partial(run_pipeline, freq='f090')
     run_pipeline_f150 = partial(run_pipeline, freq='f150')
     pgv_array_f090 = p.map(run_pipeline_f090, range(1, 100))

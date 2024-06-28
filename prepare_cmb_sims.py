@@ -28,7 +28,16 @@ for task in my_tasks:
 
     index = task+1
     alm = hp.read_alm(f"{paths.act_sim_root}fullskyLensedUnabberatedCMB_alm_set00_{index:05d}.fits",hdu=1)
-
+    
+    # AL Modif
+    # add correlated ksz
+    add_ksz = False
+    if add_ksz:
+        ksz_dir = '/home/r/rbond/alague/scratch/ksz-pipeline/ksz-analysis/quadratic_estimator/development_code/QPM_maps/'
+        ksz_sim = hp.read_map(ksz_dir + f'ksz_map_from_BAO_recon_{index}.fits')
+        ksz_alm = hp.map2alm(ksz_sim)
+        alm = alm[:len(ksz_alm)] + ksz_alm
+    
     for freq in args.freqs:
         print(f"Rank {rank} starting {freq} for task {index} / {len(my_tasks)}...")
         args.freq = freq

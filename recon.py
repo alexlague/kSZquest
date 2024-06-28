@@ -293,7 +293,7 @@ def CreateFilters(Source, Iso=True):
         def pge_pgg_filter(k, v):
             kk = sum(ki ** 2 for ki in k) # k^2 on the mesh
             kk[kk == 0] = 1
-            mu = k[0] / kk #DEBUG
+            mu = k[2] / kk #DEBUG
             num = Pge(np.sqrt(kk), mu)#*h**3
             den = Pgg(np.sqrt(kk), mu)#*h**3
             fil = num / den
@@ -303,7 +303,7 @@ def CreateFilters(Source, Iso=True):
         def pge2_pgg_filter(k, v):
             kk = sum(ki ** 2 for ki in k) # k^2 on the mesh
             kk[kk == 0] = 1
-            mu = k[0] / kk #DEBUG k[0] or k[2]?
+            mu = k[2] / kk #DEBUG k[0] or k[2]?
             num = Pge(np.sqrt(kk), mu)#*h**3
             den = Pgg(np.sqrt(kk), mu)#*h**3
             fil = num**2 / den
