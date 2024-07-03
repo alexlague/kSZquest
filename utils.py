@@ -18,7 +18,7 @@ def wfid(freq):
 
 def get_beam(freq):
     # Warning: this doesn't check that delta_ell=1, which is assumed elsewhere
-    beam_file = f"{paths.act_root}beams/act_planck_dr5.01_s08s18_{freq}_{jobargs.daynight}_beam.txt"
+    beam_file = f"{paths.act_root}../auxilliary/beams/act_planck_dr5.01_s08s18_{freq}_{jobargs.daynight}_beam.txt"
 
     # Load beam and normalize it
     ls,bells = np.loadtxt(beam_file,unpack=True)
