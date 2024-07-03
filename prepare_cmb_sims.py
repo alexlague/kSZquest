@@ -47,11 +47,17 @@ for task in my_tasks:
         oalm = cs.almxfl(alm,bells)
         cmap = cs.alm2map(oalm,enmap.empty(gmasks[freq].shape,gmasks[freq].wcs,dtype=np.float32)) # beam convolved signal
         wfit = np.loadtxt(f'{paths.out_dir}/wfit_{sstr}.txt').flatten()[0]
+        mfact = np.loadtxt(f'{paths.out_dir}/mfact_{sstr}.txt').flatten()[0]
 
-        nmap = maps.white_noise(gmasks[freq].shape,gmasks[freq].wcs,wfit)
+        #nmap = maps.white_noise(gmasks[freq].shape,gmasks[freq].wcs,wfit)
+        nmap = maps.white_noise(imap.shape,imap.wcs,div=ivar)
+        nmap = nmap * mfact
+
         imap = cmap + nmap
         
-        alm, falm, ells, theory_filter, wfit, fcls = kutils.get_single_frequency_alms(imap, gmasks[freq],ls,bells,args.fit_lmin,args.fit_lmax,args.lmin,args.lmax,kutils.wfid(args.freq),debug=False)
+        alm, falm, ells, theory_filter, wfit, fcls,_ = kutils.get_single_frequency_alms(imap, gmasks[freq],ls,bells,
+                                                                                      args.fit_lmin,args.fit_lmax,args.lmin,args.lmax,
+                                                                                      kutils.wfid(args.freq),debug=False,is_sim=True)
         hp.write_alm(f'{paths.out_dir}/sims/filtered_alms_{sstr}_simid_{index}.fits',falm,overwrite=True)
         io.save_cols(f'{paths.out_dir}/sims/theory_filter_{sstr}_simid_{index}.txt',(ells,theory_filter))
         np.savetxt(f'{paths.out_dir}/sims/fcls_{sstr}_simid_{index}.txt',fcls)

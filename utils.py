@@ -36,7 +36,7 @@ def save_string(args):
         sstr = sstr + f"{key}_{args._dict[key]}_"
     return sstr[:-1]
 
-def get_single_frequency_alms(imap, gmask,ls,bells,fit_lmin,fit_lmax,lmin,lmax,w_fid,debug=False):
+def get_single_frequency_alms(imap, gmask,ls,bells,fit_lmin,fit_lmax,lmin,lmax,w_fid,debug=False,is_sim=False,ivar=None):
     imap[gmask<=0] = 0
     if debug:
         io.hplot(imap,"masked_map",downgrade=8,mask=0)
@@ -63,6 +63,20 @@ def get_single_frequency_alms(imap, gmask,ls,bells,fit_lmin,fit_lmax,lmin,lmax,w
     popt,_ = curve_fit(fitfunc,ells,ecl_binned,p0=[1.,w_fid])
     wfit = popt[1]
     print(f"Fit white noise {wfit} uK-arcmin. Use this value for simulations.")
+
+    if not(is_sim):
+        nmap = maps.white_noise(imap.shape,imap.wcs,div=ivar)
+        nmap[gmask<=0] = 0
+        nalm = cs.map2alm(nmap,lmax=lmax)
+        # Empirical power spectrum of map
+        ncltt = cs.alm2cl(nalm)/w2
+        nmean = ncltt[:-500].mean()
+        wsim = np.sqrt(nmean)/(np.pi/180./60.)
+        mfact = wfit/wsim
+        print(f"White noise rescale factor is {mfact}. Use this value for simulations.")
+
+    else:
+        mfact = None
 
     if debug:
         pl = io.Plotter('Cell')
@@ -94,7 +108,7 @@ def get_single_frequency_alms(imap, gmask,ls,bells,fit_lmin,fit_lmax,lmin,lmax,w
         pl.add(ells,fcls/w2,label='filtered power')
         pl.done('empcls.png')
 
-    return alm, falm, ells, theory_filter, wfit, fcls/w2
+    return alm, falm, ells, theory_filter, wfit, fcls/w2, mfact
 
 
     
