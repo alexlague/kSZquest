@@ -109,4 +109,8 @@ def get_single_frequency_alms(imap, gmask,ls,bells,fit_lmin,fit_lmax,lmin,lmax,w
         pl.done('empcls.png')
 
     return alm, falm, ells, theory_filter, wfit, fcls/w2, mfact
+
+
+    
+        
         
