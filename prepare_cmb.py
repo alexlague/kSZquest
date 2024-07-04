@@ -21,6 +21,7 @@ for freq in args.freqs:
     imap = enmap.read_map(act_file,sel=np.s_[0,...])
     ivar = enmap.read_map(ivar_file,sel=np.s_[0,...])
     rms = maps.rms_from_ivar(ivar)
+    gmask[ivar<=0] = 0
     gmask[rms>=kutils.defaults.rms_threshold] = 0
 
     enmap.write_map(f'{paths.out_dir}/mask_{args.freq}.fits',gmask)
