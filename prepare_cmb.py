@@ -30,11 +30,14 @@ for freq in args.freqs:
     ls,bells = kutils.get_beam(args.freq)
 
 
-    alm, falm, ells, theory_filter, wfit, fcls = kutils.get_single_frequency_alms(imap, gmask,ls,bells,args.fit_lmin,args.fit_lmax,args.lmin,args.lmax,kutils.wfid(args.freq),debug=False)
+    alm, falm, ells, theory_filter, wfit, fcls,mfact = kutils.get_single_frequency_alms(imap, gmask,ls,bells,
+                                                                                  args.fit_lmin,args.fit_lmax,args.lmin,
+                                                                                  args.lmax,kutils.wfid(args.freq),debug=False,is_sim=False,ivar=ivar)
     sstr = kutils.save_string(args)
     hp.write_alm(f'{paths.out_dir}/filtered_alms_{sstr}.fits',falm,overwrite=True)
     io.save_cols(f'{paths.out_dir}/theory_filter_{sstr}.txt',(ells,theory_filter))
     np.savetxt(f'{paths.out_dir}/wfit_{sstr}.txt',np.asarray((wfit,)))
+    np.savetxt(f'{paths.out_dir}/mfact_{sstr}.txt',np.asarray((mfact,)))
     np.savetxt(f'{paths.out_dir}/fcls_{sstr}.txt',fcls)
 
     
