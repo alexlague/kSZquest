@@ -35,8 +35,10 @@ for task in my_tasks:
     if add_ksz:
         ksz_dir = '/home/r/rbond/alague/scratch/ksz-pipeline/ksz-analysis/quadratic_estimator/development_code/QPM_maps/'
         ksz_sim = hp.read_map(ksz_dir + f'ksz_map_from_BAO_recon_{index}.fits')
-        ksz_alm = hp.map2alm(ksz_sim)
-        alm = alm[:len(ksz_alm)] + ksz_alm
+        cmb = hp.alm2map(alm, 1024) # nside of simulated ksz maps
+        ksz_plus_cmb = ksz_sim + cmb
+        #hp.map2alm(ksz_sim)
+        alm = map2alm(ksz_plus_cmb, lmax=hp.sphtfunc.Alm.getlmax(alm))
     
     for freq in args.freqs:
         print(f"Rank {rank} starting {freq} for task {index} / {len(my_tasks)}...")

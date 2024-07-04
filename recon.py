@@ -196,11 +196,13 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None, NSIDE=None):
         rand_array = T_rand_cat.to_mesh(BoxSize=Source.BoxSize, Nmesh=Source.Nmesh) # (1 + delta_rand)
 
         # smooth temperature grid
-        #from nbodykit.filters import Gaussian
-        T_rand_array = T_rand_array.to_field() #apply(Gaussian(50.)).paint(mode='real')
+        from nbodykit.filters import Gaussian
+        #T_rand_array = T_rand_array.to_field() #apply(Gaussian(50.)).paint(mode='real')
+        T_rand_array = T_rand_array.apply(Gaussian(15.)).paint(mode='real')
+        
         rand_array = rand_array.to_field() #apply(Gaussian(0.)).paint(mode='real')
 
-        T_grid = T_rand_array #/ rand_array # SHOULD DIVIDE HERE?? lower noise if not dividing
+        T_grid = np.array(T_rand_array) #/ rand_array # SHOULD DIVIDE HERE?? lower noise if not dividing
         T_grid[rand_array==0.] = 0.
         
         

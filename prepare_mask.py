@@ -8,7 +8,7 @@ import utils as kutils
 
 paths = kutils.paths
 
-ivar_file = f"{paths.act_root}/act_dr5.01_s08s18_AA_f090_night_ivar.fits"
+ivar_file = f"{paths.act_root}/act_dr5.01_s08s18_AA_f090_daynight_ivar.fits"
 mask_file = f"{paths.planck_root}HFI_Mask_GalPlane-apo0_2048_R2.00.fits"
 
 shape,wcs = enmap.read_map_geometry(ivar_file)

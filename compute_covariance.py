@@ -27,7 +27,7 @@ cosmo = cosmology.Cosmology(h=0.676).match(Omega0_m=0.31)
 #freq = 'f090'
 NSIDE = 2048
 Nmesh = 512
-Nkeep = 6 # keep only the N points in the largest scales (to avoid nans)
+Nkeep = 20 # keep only the N points in the largest scales (to avoid nans)
 
 # rand catalog the same for every mock
 
@@ -193,7 +193,7 @@ def run_pipeline(imock, freq):
     # main reconstruction step
     fil_dir = '/home/r/rbond/alague/scratch/ksz-pipeline/ksz-analysis/quadratic_estimator/'
     fil_dir += 'development_code/prepared_maps/sims/'
-    prefix = "theory_filter_daynight_night_fit_lmax_7000_fit_lmin_1200_freq_"
+    prefix = "theory_filter_daynight_daynight_fit_lmax_7000_fit_lmin_1200_freq_"
     fil_path = fil_dir + prefix + freq + "_freqs_['" + freq + "']_lmax_8000_lmin_100_simid_" + str(jcmbsim) + ".txt"
     prefactor, recon_noise = recon.CalculateNoiseFromFilter(lc, CMBFilterPath=fil_path)
 
