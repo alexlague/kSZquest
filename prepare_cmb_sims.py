@@ -6,7 +6,7 @@ import os,sys
 import healpy as hp
 import utils as kutils
 
-Nsims = 2
+Nsims = 100
 
 args = kutils.jobargs # these will be added to filenames
 paths = kutils.paths
