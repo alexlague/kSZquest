@@ -14,7 +14,7 @@ def ivar_file(freq):
     return f"{paths.act_root}act_planck_dr5.01_s08s18_AA_{freq}_{jobargs.daynight}_ivar.fits"
 
 def wfid(freq):
-    return {'f090':50.0,'f150':30.}[freq]
+    return {'f090':30.0,'f150':20.}[freq]
 
 def get_beam(freq):
     # Warning: this doesn't check that delta_ell=1, which is assumed elsewhere
@@ -39,7 +39,7 @@ def save_string(args):
 def get_single_frequency_alms(imap, gmask,ls,bells,fit_lmin,fit_lmax,lmin,lmax,w_fid,debug=False,is_sim=False,ivar=None):
     imap[gmask<=0] = 0
     if debug:
-        io.hplot(imap,"masked_map",downgrade=8,mask=0)
+        io.hplot(imap,f"masked_map_{debug}",downgrade=8,mask=0)
     w2 = maps.wfactor(2,gmask)
     # Mask power correction factor
     print(f"W factor: {w2}")
@@ -59,20 +59,23 @@ def get_single_frequency_alms(imap, gmask,ls,bells,fit_lmin,fit_lmax,lmin,lmax,w
     binner = stats.bin1D(bin_edges)
     cents,ecl_binned = binner.bin(ells,dcltt)
     cents,tcl_binned = binner.bin(ells,cltt*bls**2.)
-    fitfunc = lambda x,a,w: a*tcl_binned+(w*np.pi/180./60.)**2.
-    popt,_ = curve_fit(fitfunc,ells,ecl_binned,p0=[1.,w_fid])
+    fitfunc = lambda x,a,w,lknee: a*tcl_binned+ binner.bin(ells,maps.rednoise(ells,w,lknee,-3))[1]
+    popt,_ = curve_fit(fitfunc,cents,ecl_binned,p0=[1.,w_fid,3000.])
     wfit = popt[1]
-    print(f"Fit white noise {wfit} uK-arcmin. Use this value for simulations.")
+    lkneefit = popt[2]
+    print(f"Fit white noise {wfit} uK-arcmin and lknee {lkneefit}. Use these values for simulations.")
 
     if not(is_sim):
-        nmap = maps.white_noise(imap.shape,imap.wcs,div=ivar)
+        nmap = maps.modulated_noise_map(ivar,lknee=lkneefit,alpha=-3,lmax=lmax,lmin=lmin)
         nmap[gmask<=0] = 0
         nalm = cs.map2alm(nmap,lmax=lmax)
         # Empirical power spectrum of map
         ncltt = cs.alm2cl(nalm)/w2
-        nmean = ncltt[:-500].mean()
+        nmean = ncltt[-500:].mean()
         wsim = np.sqrt(nmean)/(np.pi/180./60.)
-        mfact = wfit/wsim
+        nmean_dat = dcltt[-500:].mean()
+        wdat = np.sqrt(nmean_dat)/(np.pi/180./60.)
+        mfact = wdat/wsim
         print(f"White noise rescale factor is {mfact}. Use this value for simulations.")
 
     else:
@@ -81,14 +84,14 @@ def get_single_frequency_alms(imap, gmask,ls,bells,fit_lmin,fit_lmax,lmin,lmax,w
     if debug:
         pl = io.Plotter('Cell')
         pl.add(cents,ecl_binned,label='binned data')
-        pl.add(cents,tcl_binned,ls=':',label='theory template')
+        # pl.add(cents,tcl_binned,ls=':',label='theory template')
         pl.add(cents,fitfunc(ells,*popt),ls='--',label='best fit')
         pl.hline((w_fid*np.pi/180./60.)**2.,label='white noise guess')
-        pl.done('fitcls.png')
+        pl.done(f'fitcls_{debug}.png')
 
 
     # Construct filters
-    wnoise = (wfit * np.pi/180./60.)**2.
+    wnoise = maps.rednoise(ells,wfit,lkneefit,alpha=-3)
     decon_filter = bls / ((bls**2)*cltt + wnoise)  # filter to apply to map
     decon_filter[ells<lmin] = 0
     theory_filter = 1./(cltt + wnoise/bls**2) # filter to use in theory normalization calculations
@@ -106,9 +109,9 @@ def get_single_frequency_alms(imap, gmask,ls,bells,fit_lmin,fit_lmax,lmin,lmax,w
         pl.add(ells,dcltt,label='empirical power')
         pl.add(ells,(theory_filter**2.) * (cltt*bls**2+wnoise)/bls**2.,label='expected filtered power')
         pl.add(ells,fcls/w2,label='filtered power')
-        pl.done('empcls.png')
+        pl.done(f'empcls_{debug}.png')
 
-    return alm, falm, ells, theory_filter, wfit, fcls/w2, mfact
+    return alm, falm, ells, theory_filter, wfit, fcls/w2, mfact, lkneefit
 
 
     
