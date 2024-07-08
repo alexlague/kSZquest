@@ -6,16 +6,16 @@ jobargs:
   lmax: 8000
 
   # This is only relevant for fitting the white noise level. Probably no need to change this.
-  fit_lmin: 1200
-  fit_lmax: 7000
+  fit_lmin: 1000
+  fit_lmax: 7980
 
   # TODO: change to daynight
-  daynight: "night"
+  daynight: "daynight"
   
 # TODO: change to list of both frequencies
 freqs:
   - 'f090'
-  #- 'f150'
+  - 'f150'
 
 # This is relevant for making the mask in prepare_cmb.py
 # Inspect the output masked_map.png to make sure this is ok
