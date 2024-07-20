@@ -10,7 +10,7 @@ args = kutils.jobargs
 paths = kutils.paths
 
 BOSS_dir = '/home/r/rbond/alague/scratch/ksz-pipeline/BOSS_data/CMASS/'
-BOSS_file = 'pre-recon/cmass/galaxy_DR12v5_CMASS_North_t2.txt'
+BOSS_file = 'pre-recon/cmass/galaxy_DR12v5_CMASS_South_t2.txt'
 data = np.loadtxt(BOSS_dir+BOSS_file) # catalog of galxies with ra, dec, z as first columns
 
 # boundaries of survey
@@ -60,4 +60,4 @@ for M in range(len(log_mass_array)):
 
 print(len(massive_galaxies_indexes))
 
-np.savetxt(paths.out_dir + "massive_clusters_to_remove_CMASS_NGC.dat", np.array(massive_galaxies_indexes))
+np.savetxt(paths.out_dir + "massive_clusters_to_remove_CMASS_SGC.dat", np.array(massive_galaxies_indexes))

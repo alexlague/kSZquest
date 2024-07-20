@@ -34,11 +34,14 @@ for task in my_tasks:
     add_ksz = False
     if add_ksz:
         ksz_dir = '/home/r/rbond/alague/scratch/ksz-pipeline/ksz-analysis/quadratic_estimator/development_code/QPM_maps/'
-        ksz_sim = hp.read_map(ksz_dir + f'ksz_map_from_BAO_recon_{index}.fits')
-        cmb = hp.alm2map(alm, 1024) # nside of simulated ksz maps
-        ksz_plus_cmb = ksz_sim + cmb
+        ksz_sim = hp.read_map(ksz_dir + f'ksz_map_from_BAO_recon_{index}.fits', dtype=np.float32)
+        ksz_sim *= 1e6 # to match units of ACT sims
+        #cmb = hp.alm2map(alm, 1024) # nside of simulated ksz maps
+        LMAX = hp.sphtfunc.Alm.getlmax(len(alm))
+        ksz_alm = hp.map2alm(ksz_sim, lmax=LMAX)
+        alm = 3*ksz_alm + alm # DEBUG TO SEE IF KSZ MAP MATCHES INPUT MOCK CATALOG
         #hp.map2alm(ksz_sim)
-        alm = map2alm(ksz_plus_cmb, lmax=hp.sphtfunc.Alm.getlmax(alm))
+        #alm = map2alm(ksz_plus_cmb, lmax=hp.sphtfunc.Alm.getlmax(alm))
     
     for freq in kutils.defaults.freqs:
         print(f"Rank {rank} starting {freq} for task {index} / {len(my_tasks)}...")
