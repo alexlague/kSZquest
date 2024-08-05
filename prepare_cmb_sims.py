@@ -31,7 +31,7 @@ for task in my_tasks:
     
     # AL Modif
     # add correlated ksz
-    add_ksz = False
+    add_ksz = True
     if add_ksz:
         ksz_dir = '/home/r/rbond/alague/scratch/ksz-pipeline/ksz-analysis/quadratic_estimator/development_code/QPM_maps/'
         ksz_sim = hp.read_map(ksz_dir + f'ksz_map_from_BAO_recon_{index}.fits', dtype=np.float32)
@@ -39,7 +39,7 @@ for task in my_tasks:
         #cmb = hp.alm2map(alm, 1024) # nside of simulated ksz maps
         LMAX = hp.sphtfunc.Alm.getlmax(len(alm))
         ksz_alm = hp.map2alm(ksz_sim, lmax=LMAX)
-        alm = 3*ksz_alm + alm # DEBUG TO SEE IF KSZ MAP MATCHES INPUT MOCK CATALOG
+        alm = ksz_alm + alm # DEBUG TO SEE IF KSZ MAP MATCHES INPUT MOCK CATALOG
         #hp.map2alm(ksz_sim)
         #alm = map2alm(ksz_plus_cmb, lmax=hp.sphtfunc.Alm.getlmax(alm))
     
@@ -63,9 +63,13 @@ for task in my_tasks:
         alm, falm, ells, theory_filter, wfit, fcls,_,_ = kutils.get_single_frequency_alms(imap, gmasks[freq],ls,bells,
                                                                                       args.fit_lmin,args.fit_lmax,args.lmin,args.lmax,
                                                                                       kutils.wfid(args.freq),debug=False,is_sim=True)
-        hp.write_alm(f'{paths.out_dir}/sims/alms_{sstr}_simid_{index}.fits',alm,overwrite=True)
-        hp.write_alm(f'{paths.out_dir}/sims/filtered_alms_{sstr}_simid_{index}.fits',falm,overwrite=True)
-        io.save_cols(f'{paths.out_dir}/sims/theory_filter_{sstr}_simid_{index}.txt',(ells,theory_filter))
-        np.savetxt(f'{paths.out_dir}/sims/fcls_{sstr}_simid_{index}.txt',fcls)
-
-    
+        if add_ksz:
+            hp.write_alm(f'{paths.out_dir}/sims/alms_{sstr}_simid_{index}_with_ksz.fits',alm,overwrite=True)
+            hp.write_alm(f'{paths.out_dir}/sims/filtered_alms_{sstr}_simid_{index}_with_ksz.fits',falm,overwrite=True)
+            io.save_cols(f'{paths.out_dir}/sims/theory_filter_{sstr}_simid_{index}_with_ksz.txt',(ells,theory_filter))
+            np.savetxt(f'{paths.out_dir}/sims/fcls_{sstr}_simid_{index}_with_ksz.txt',fcls)
+        else:
+            hp.write_alm(f'{paths.out_dir}/sims/alms_{sstr}_simid_{index}.fits',alm,overwrite=True)
+            hp.write_alm(f'{paths.out_dir}/sims/filtered_alms_{sstr}_simid_{index}.fits',falm,overwrite=True)
+            io.save_cols(f'{paths.out_dir}/sims/theory_filter_{sstr}_simid_{index}.txt',(ells,theory_filter))
+            np.savetxt(f'{paths.out_dir}/sims/fcls_{sstr}_simid_{index}.txt',fcls)

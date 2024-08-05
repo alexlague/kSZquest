@@ -33,15 +33,22 @@ Nkeep = 20 # keep only the N points in the largest scales (to avoid nans)
 # mock galaxy catalogs
 use_act_data = False
 use_boss_data = False
+# Use sims with imprinted ksz signal
+# store in different directory named after the Tgrid painting procedure
+with_ksz = True
+with_ksz_dir = "Tgrid_tests/sph_grid_painting_no_smooth/"
+
+if with_ksz:
+    assert use_act_data == False and use_boss_data == False
 
 # rand catalog the same for every mock
 if use_boss_data:
     BOSS_dir = '/home/r/rbond/alague/scratch/ksz-pipeline/BOSS_data/CMASS/'
-    BOSS_rand = 'pre-recon/cmass/random0_DR12v5_CMASS_South_t1.txt'
+    BOSS_rand = 'pre-recon/cmass/random0_DR12v5_CMASS_North_t1.txt'
     rand1 = np.loadtxt(BOSS_dir+BOSS_rand)
 else:
     mock_dir = '/home/r/rbond/alague/scratch/ksz-pipeline/QPM_mock_data/'
-    rand1 = np.loadtxt(mock_dir+'mock_random_DR12_CMASS_S_50x1.rdzw')
+    rand1 = np.loadtxt(mock_dir+'mock_random_DR12_CMASS_N_50x1.rdzw')
 #rand2 = np.loadtxt(mock_dir+'mock_random_DR12_CMASS_N_50x2.rdzw')
 #rand = np.concatenate((rand1, rand2))
 
@@ -76,10 +83,10 @@ def load_galaxy_mock(imock, freq):
 
     if use_boss_data:
         BOSS_dir = '/home/r/rbond/alague/scratch/ksz-pipeline/BOSS_data/CMASS/'
-        BOSS_file = 'pre-recon/cmass/galaxy_DR12v5_CMASS_South_t2.txt'
+        BOSS_file = 'pre-recon/cmass/galaxy_DR12v5_CMASS_North_t2.txt'
         data = np.loadtxt(BOSS_dir+BOSS_file)
     else:
-        data = np.loadtxt(mock_dir+'mock_galaxy_DR12_CMASS_S_QPM_' + ID + '.rdzw')
+        data = np.loadtxt(mock_dir+'mock_galaxy_DR12_CMASS_N_QPM_' + ID + '.rdzw')
 
     # Remove galaxies outside of redshift range
     z_min = 0.43
@@ -212,7 +219,10 @@ def load_cmb_mock(jcmbsim, freq):
     else:
         prefix = "sims/filtered_alms_daynight_daynight_fit_lmax_7980_fit_lmin_1000_freq_"
         suffix = "_lmax_8000_lmin_100"
-        filtered_alms = hp.fitsfunc.read_alm(paths.out_dir + prefix + freq + suffix + '_simid_'  + str(jcmbsim)  + '.fits')
+        if with_ksz:
+            filtered_alms = hp.fitsfunc.read_alm(paths.out_dir + prefix + freq + suffix + '_simid_'  + str(jcmbsim)  + '_with_ksz.fits')
+        else:
+            filtered_alms = hp.fitsfunc.read_alm(paths.out_dir + prefix + freq + suffix + '_simid_'  + str(jcmbsim)  + '.fits')
 
     alms = np.zeros((3, len(filtered_alms)), dtype=complex)
     alms[0] = filtered_alms
@@ -264,8 +274,11 @@ def run_pipeline(imock, freq):
         fil_dir += 'development_code/prepared_maps/sims/'
         prefix = "theory_filter_daynight_daynight_fit_lmax_7980_fit_lmin_1000_freq_"
         suffix = "_lmax_8000_lmin_100_simid_"
-        fil_path = fil_dir + prefix + freq + suffix + str(jcmbsim) + ".txt"
-
+        if with_ksz:
+            fil_path = fil_dir + prefix + freq + suffix + str(jcmbsim) + "_with_ksz.txt"
+        else:
+            fil_path = fil_dir + prefix + freq + suffix + str(jcmbsim) + ".txt"
+            
     prefactor, recon_noise = recon.CalculateNoiseFromFilter(lc, CMBFilterPath=fil_path)
 
     print(f"prefactor and recon noise: {prefactor}, {recon_noise}")
@@ -352,20 +365,30 @@ print(f"Array shape after parallel computation is {pgv_array_f090.shape}, {pvv_a
 cov_matrix_f090 = np.cov(np.array(pgv_array_f090).T)
 cov_matrix_f150 = np.cov(np.array(pgv_array_f150).T)
 
-np.savetxt(paths.out_dir + "Pgv_ell_1_SGC_f090_array.dat", np.array(pgv_array_f090).T)
-np.savetxt(paths.out_dir + "Pgv_ell_1_SGC_f150_array.dat", np.array(pgv_array_f150).T)
+out_dir = paths.out_dir
 
-np.savetxt(paths.out_dir + "Pvv_ell_0_SGC_f090_array.dat", np.array(pvv_array_f090).T)
-np.savetxt(paths.out_dir + "Pvv_ell_0_SGC_f150_array.dat", np.array(pvv_array_f150).T)
+if use_act_data:
+    out_dir += "null_test_act_maps_mock_galaxies/"
+elif use_boss_data:
+    out_dir += "null_test_boss_data_mock_cmb/"
+elif with_ksz:
+    out_dir += with_ksz_dir
 
-np.savetxt(paths.out_dir + "Pgv_ell_1_SGC_f090_cov_mat.dat", cov_matrix_f090)
-np.savetxt(paths.out_dir + "Pgv_ell_1_SGC_f150_cov_mat.dat", cov_matrix_f150)
+# Save spectra and covmat to file
+np.savetxt(out_dir + "Pgv_ell_1_NGC_f090_array.dat", np.array(pgv_array_f090).T)
+np.savetxt(out_dir + "Pgv_ell_1_NGC_f150_array.dat", np.array(pgv_array_f150).T)
+
+np.savetxt(out_dir + "Pvv_ell_0_NGC_f090_array.dat", np.array(pvv_array_f090).T)
+np.savetxt(out_dir + "Pvv_ell_0_NGC_f150_array.dat", np.array(pvv_array_f150).T)
+
+np.savetxt(out_dir + "Pgv_ell_1_NGC_f090_cov_mat.dat", cov_matrix_f090)
+np.savetxt(out_dir + "Pgv_ell_1_NGC_f150_cov_mat.dat", cov_matrix_f150)
 
 pgv_array_full = np.concatenate((np.array(pgv_array_f090).T, np.array(pgv_array_f150).T))
 print(f"Array shape after concatenation is {np.array(pgv_array_full).shape}")
 
 cov_matrix_full = np.cov(np.array(pgv_array_full))
-np.savetxt(paths.out_dir + "Pgv_ell_1_SGC_full_cov_mat.dat", cov_matrix_full)
+np.savetxt(out_dir + "Pgv_ell_1_NGC_full_cov_mat.dat", cov_matrix_full)
 
 print(f"Final covariance matrix shape is {cov_matrix_full.shape}")
 #print(np.cov(np.array(pgv_array, dtype=np.float32).reshape(Nkeep, -1)).shape)

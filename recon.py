@@ -4,7 +4,7 @@ from a CMB map and a halo density field
 '''
 
 import numpy as np
-from scipy.interpolate import interp1d, RectBivariateSpline, RegularGridInterpolator
+from scipy.interpolate import interp1d, RectBivariateSpline, RegularGridInterpolator, CubicSpline
 from scipy import constants
 
 import nbodykit
@@ -79,11 +79,50 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None, NSIDE=None):
         # scale the angles as function of los distance
         # use RectGridInterpolator to set fill_value to 0. outside RA/DEC range
         # TODO: use regular grid interp everywhere
-        
+       
+        # DEBUG T grid procedure
         ras = np.array(Source.data['ra'])
-        decs = np.array(Source.data['dec'])
+        decs = np.array(Source.data['dec']) 
+        #ras = np.array(Source.randoms['ra'])
+        #decs = np.array(Source.randoms['dec'])
+        #data_pos = np.array(Source.randoms['Position']) - np.min(np.array(Source.randoms['Position']), axis=0)
+        #data_pos = data_pos[::10]
         data_pos = np.array(Source.data['Position'])-np.min(np.array(Source.data['Position']), axis=0)
         
+        trial_grid = True # debugging option
+        cart_grid = False # using cartesian grid of points
+        sph_grid = True # using spherical (ra, dec, z) grid of points 
+        if trial_grid:
+            N = 512 #10_000_000
+            
+            if cart_grid:
+                xmin, ymin, zmin = np.min(data_pos, axis=0)
+                xmax, ymax, zmax = np.max(data_pos, axis=0)
+                xc = np.linspace(xmin, xmax, Source.Nmesh)
+                yc = np.linspace(ymin, ymax, Source.Nmesh)
+                zc = np.linspace(zmin, zmax, Source.Nmesh)
+            
+                xc, yc, zc = np.meshgrid(xc, yc, zc)
+                data_pos = np.array([xc.ravel(), yc.ravel(), zc.ravel()]).T
+                ras, decs, redshifts = transform.CartesianToSky(data_pos, cosmo=Source.cosmo)
+
+            elif sph_grid:                
+                ras = np.linspace(ras.min(), ras.max(), N)
+                decs = np.linspace(decs.min(), decs.max(), N)
+                zs = np.linspace(0.43, 0.7, N)
+                #redshifts = np.array(Source.data['z'])
+                #zs_interp = np.linspace(0.3, 0.8, 5000)
+                #z_from_chis = CubicSpline(Source.cosmo.comoving_distance(zs_interp), zs_interp)
+                #zs = z_from_chis(np.linspace(Source.cosmo.comoving_distance(0.43), Source.cosmo.comoving_distance(0.7), N)) # uniform in chi
+            
+                ras, decs, zs = np.meshgrid(ras, decs, zs)
+                ras = ras.ravel()
+                decs = decs.ravel()
+                zs = zs.ravel()
+                data_pos = transform.SkyToCartesian(ras, decs, zs, Source.cosmo)
+                
+            data_pos = np.array(data_pos) - np.min(np.array(data_pos), axis=0)
+
         if CMBMap.ndim == 2:
             RAs = np.linspace(Source.minRA, Source.maxRA, CMBMap.shape[0])
             DECs = np.linspace(Source.minDEC,Source.maxDEC, CMBMap.shape[1])
@@ -186,23 +225,45 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None, NSIDE=None):
             #all_pos = data_pos #np.concatenate((data_pos, rand_pos), axis=0)
 
         #samples['T'] = T_vals
-        redshifts = np.array(Source.data['z'])
-        chis = np.array(Source.cosmo.comoving_distance(redshifts))
-        z_weights = chis**2 / (1+redshifts)**2
-        z_weights /= np.mean(z_weights)
-        #T_rand_cat = ArrayCatalog({'Position':data_pos, 'T': z_weights * T_vals}) # samples
+
         T_rand_cat = ArrayCatalog({'Position':data_pos, 'T': T_vals})
+        rand_array = T_rand_cat.to_mesh(BoxSize=Source.BoxSize, Nmesh=Source.Nmesh) # (1 + delta_rand) 
+        rand_array = np.array(rand_array.to_field())
+        
+        interp = False
+        if interp:
+            x_c = np.linspace(0, Source.BoxSize[0], Source.Nmesh)
+            y_c = np.linspace(0, Source.BoxSize[1], Source.Nmesh)
+            z_c = np.linspace(0, Source.BoxSize[2], Source.Nmesh)
+            rand_array_interp = RegularGridInterpolator((x_c, y_c, z_c), rand_array)
+            rand_array_interp = rand_array_interp(np.array(data_pos)) # 1+ delta at tracers
+            
+            print(rand_array_interp.shape)
+            print(rand_array_interp)
+            T_vals = T_vals / rand_array_interp
+            T_vals[~np.isfinite(T_vals)] = 0.
+        #redshifts = np.array(Source.data['z'])
+        #chis = np.array(Source.cosmo.comoving_distance(redshifts))
+        #z_weights = chis**2 / (1+redshifts)**2
+        #z_weights /= np.mean(z_weights)
+        #T_rand_cat = ArrayCatalog({'Position':data_pos, 'T': z_weights * T_vals}) # samples
+        
+        #T_rand_cat = ArrayCatalog({'Position':data_pos, 'T': T_vals})
+        #T_rand_cat = ArrayCatalog({'Position':data_pos, 'T': T_vals})
         T_rand_array = T_rand_cat.to_mesh(BoxSize=Source.BoxSize, Nmesh=Source.Nmesh, value='T') # (1 + delta_rand) * T
-        rand_array = T_rand_cat.to_mesh(BoxSize=Source.BoxSize, Nmesh=Source.Nmesh) # (1 + delta_rand)
 
         # smooth temperature grid
-        from nbodykit.filters import Gaussian
-        #T_rand_array = T_rand_array.to_field() #apply(Gaussian(50.)).paint(mode='real')
-        T_rand_array = T_rand_array.apply(Gaussian(15.)).paint(mode='real')
+        from nbodykit.filters import Gaussian, TopHat
+        T_rand_array = T_rand_array.to_field() #apply(Gaussian(50.)).paint(mode='real')
         
-        rand_array = rand_array.to_field() #apply(Gaussian(0.)).paint(mode='real')
+        #T_rand_array = T_rand_array.apply(TopHat(20.)).paint(mode='real')
+        #T_rand_array = T_rand_array.apply(Gaussian(15.)).paint(mode='real')
+        
+        #rand_array[rand_array==0.] = np.inf
 
+        # Retry division
         T_grid = np.array(T_rand_array) #/ rand_array # SHOULD DIVIDE HERE?? lower noise if not dividing
+        print("T_grid shape: ", T_grid.shape)
         T_grid[rand_array==0.] = 0.
         
         
@@ -212,6 +273,8 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None, NSIDE=None):
         #T_grid = ArrayMesh(T_grid, Source.BoxSize).to_field()
 
         #T_grid -= np.mean(T_grid) # centered around 0
+        
+        #np.save("/home/r/rbond/alague/scratch/ksz-pipeline/ksz-analysis/quadratic_estimator/development_code/T_grid_randoms.npy", T_grid)
         
     return T_grid
     #return Source.halo_momentum_mesh.to_field() #T_grid
