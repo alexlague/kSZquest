@@ -48,6 +48,7 @@ class LightCone:
 
         self.FSKY = FSKY
         self.Nmesh = Nmesh
+        self.T_vals = None
         
         return
 

@@ -83,28 +83,46 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None, NSIDE=None):
         # DEBUG T grid procedure
         ras = np.array(Source.data['ra'])
         decs = np.array(Source.data['dec']) 
+        #print(np.min(ras), np.max(ras), np.min(decs), np.max(decs), "0.43", "0.7")
+        
         #ras = np.array(Source.randoms['ra'])
         #decs = np.array(Source.randoms['dec'])
         #data_pos = np.array(Source.randoms['Position']) - np.min(np.array(Source.randoms['Position']), axis=0)
         #data_pos = data_pos[::10]
         data_pos = np.array(Source.data['Position'])-np.min(np.array(Source.data['Position']), axis=0)
         
-        trial_grid = True # debugging option
+        trial_grid = False # debugging option
+        zshuffle = False
         cart_grid = False # using cartesian grid of points
-        sph_grid = True # using spherical (ra, dec, z) grid of points 
+        sph_grid = False # using spherical (ra, dec, z) grid of points 
         if trial_grid:
-            N = 512 #10_000_000
+            N = 768 #10_000_000
             
             if cart_grid:
+                data_pos = np.array(Source.data['Position']) # don't remove min
                 xmin, ymin, zmin = np.min(data_pos, axis=0)
                 xmax, ymax, zmax = np.max(data_pos, axis=0)
-                xc = np.linspace(xmin, xmax, Source.Nmesh)
-                yc = np.linspace(ymin, ymax, Source.Nmesh)
-                zc = np.linspace(zmin, zmax, Source.Nmesh)
-            
+                xc = np.linspace(xmin, xmax, N)
+                yc = np.linspace(ymin, ymax, N)
+                #zc = np.linspace(zmin, zmax, Source.Nmesh)
+                zc = np.linspace(Source.cosmo.comoving_distance(0.40), Source.cosmo.comoving_distance(0.73), N)
+                #print("Edges: ", xmin, xmax, ymin, ymax, zmin, zmax)
+                
                 xc, yc, zc = np.meshgrid(xc, yc, zc)
+                #xc +=abs(np.min(np.array(Source.data['Position']), axis=0))[0]
+                #yc +=abs(np.min(np.array(Source.data['Position']), axis=0))[1]
+                #zc +=abs(np.min(np.array(Source.data['Position']), axis=0))[2]
                 data_pos = np.array([xc.ravel(), yc.ravel(), zc.ravel()]).T
-                ras, decs, redshifts = transform.CartesianToSky(data_pos, cosmo=Source.cosmo)
+                #obs = -np.min(np.array(Source.data['Position']), axis=0)
+                ras, decs, redshifts = transform.CartesianToSky(data_pos, cosmo=Source.cosmo) #observer=obs)
+                ras = np.array(ras)
+                decs = np.array(decs)
+                #redshifts = np.array(redshifts)
+                #print(np.min(ras), np.max(ras),np.min(decs), np.max(decs), np.min(redshifts), np.max(redshifts))
+                del xc
+                del yc
+                del zc
+                del redshifts
 
             elif sph_grid:                
                 ras = np.linspace(ras.min(), ras.max(), N)
@@ -120,8 +138,14 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None, NSIDE=None):
                 decs = decs.ravel()
                 zs = zs.ravel()
                 data_pos = transform.SkyToCartesian(ras, decs, zs, Source.cosmo)
-                
-            data_pos = np.array(data_pos) - np.min(np.array(data_pos), axis=0)
+        
+        if zshuffle:
+            Nc = 512
+            zs = np.array([np.linspace(0.43, 0.7, len(ras)) for _ in range(Nc)]).ravel()
+            ras = np.array([ras for _ in range(Nc)]).ravel()
+            decs = np.array([decs for _ in range(Nc)]).ravel()
+            data_pos = transform.SkyToCartesian(ras, decs, zs, Source.cosmo)
+            data_pos = np.array(data_pos) - np.min(data_pos, axis=0)
 
         if CMBMap.ndim == 2:
             RAs = np.linspace(Source.minRA, Source.maxRA, CMBMap.shape[0])
@@ -226,9 +250,10 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None, NSIDE=None):
 
         #samples['T'] = T_vals
 
+        Source.T_vals = T_vals
         T_rand_cat = ArrayCatalog({'Position':data_pos, 'T': T_vals})
-        rand_array = T_rand_cat.to_mesh(BoxSize=Source.BoxSize, Nmesh=Source.Nmesh) # (1 + delta_rand) 
-        rand_array = np.array(rand_array.to_field())
+        #rand_array = T_rand_cat.to_mesh(BoxSize=Source.BoxSize, Nmesh=Source.Nmesh) # (1 + delta_rand) 
+        #rand_array = np.array(rand_array.to_field())
         
         interp = False
         if interp:
@@ -257,14 +282,14 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None, NSIDE=None):
         T_rand_array = T_rand_array.to_field() #apply(Gaussian(50.)).paint(mode='real')
         
         #T_rand_array = T_rand_array.apply(TopHat(20.)).paint(mode='real')
-        #T_rand_array = T_rand_array.apply(Gaussian(15.)).paint(mode='real')
+        #T_rand_array = T_rand_array.apply(Gaussian(.01)).paint(mode='real')
         
         #rand_array[rand_array==0.] = np.inf
 
         # Retry division
         T_grid = np.array(T_rand_array) #/ rand_array # SHOULD DIVIDE HERE?? lower noise if not dividing
         print("T_grid shape: ", T_grid.shape)
-        T_grid[rand_array==0.] = 0.
+        #T_grid[rand_array==0.] = 0.
         
         
         for i in range(3):
@@ -509,7 +534,7 @@ def ReconstructedVelocityMesh(Source, painted_velocities):
     
     return  vhat_fkp_mesh
 
-def RunReconstruction(Source, CMBMap, ClMap=None, RA=None, DEC=None, NSIDE=None, ComputePower=True, dk=5e-3, Iso=True, Nmu=5, dk_poles=1e-2, kmax=0.3):
+def RunReconstruction(Source, CMBMap, ClMap=None, RA=None, DEC=None, NSIDE=None, ComputePower=True, dk=5e-3, Iso=True, Nmu=5, dk_poles=1e-2, kmax=0.3, use_T_grid=True):
     '''
     Input: Source - Either nbodysim or lightcone object
     '''
@@ -520,7 +545,10 @@ def RunReconstruction(Source, CMBMap, ClMap=None, RA=None, DEC=None, NSIDE=None,
     T_grid          = CreateTGrid(Source, CMBMap, RA=RA, DEC=DEC, NSIDE=NSIDE)
     filter_dict     = CreateFilters(Source, Iso=Iso)
     delta_e_field   = Delta_eField(Source, filter_dict)
-    delta_e_times_T = delta_e_field * T_grid
+    if use_T_grid:
+        delta_e_times_T = delta_e_field * T_grid
+    else:
+        delta_e_times_T = delta_e_field
     noise_of_k      = CalculateNoise(Source, delta_e_times_T, filter_dict, ClMap=ClMap, RA=RA, DEC=DEC)
     vhat_of_k       = (noise_of_k)**-1 * delta_e_times_T.r2c()
     

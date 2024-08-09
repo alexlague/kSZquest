@@ -35,8 +35,8 @@ use_act_data = False
 use_boss_data = False
 # Use sims with imprinted ksz signal
 # store in different directory named after the Tgrid painting procedure
-with_ksz = True
-with_ksz_dir = "Tgrid_tests/sph_grid_painting_no_smooth/"
+with_ksz = False
+with_ksz_dir = "Tgrid_tests/no_grid_painting_no_smooth/"
 
 if with_ksz:
     assert use_act_data == False and use_boss_data == False
@@ -221,12 +221,20 @@ def load_cmb_mock(jcmbsim, freq):
         suffix = "_lmax_8000_lmin_100"
         if with_ksz:
             filtered_alms = hp.fitsfunc.read_alm(paths.out_dir + prefix + freq + suffix + '_simid_'  + str(jcmbsim)  + '_with_ksz.fits')
+            
+            #ksz_dir = '/home/r/rbond/alague/scratch/ksz-pipeline/ksz-analysis/quadratic_estimator/development_code/QPM_maps/'
+            #index = jcmbsim
+            #ksz_sim = hp.read_map(ksz_dir + f'ksz_map_from_BAO_recon_{index}.fits', dtype=np.float32)
+            #ksz_sim *= 1e6 
+            #LMAX = 6000 #hp.sphtfunc.Alm.getlmax(len(alm))
+            #ksz_alm = hp.map2alm(ksz_sim, lmax=LMAX)
+
         else:
             filtered_alms = hp.fitsfunc.read_alm(paths.out_dir + prefix + freq + suffix + '_simid_'  + str(jcmbsim)  + '.fits')
 
     alms = np.zeros((3, len(filtered_alms)), dtype=complex)
     alms[0] = filtered_alms
-    healpix_filtered = hp.alm2map(alms, NSIDE, pol=False)[0]
+    healpix_filtered = hp.alm2map(alms, NSIDE, pol=False)[0] # ksz sims
     LMAX = 5000
     ksz_lc = cmb.CMBMap(healpix_filtered, {}, LMAX,
                         noise_lvl=None,
@@ -239,7 +247,9 @@ def load_cmb_mock(jcmbsim, freq):
     AddPrimary = False
 
     ksz_lc.PrepareRecon(AddPrimary=AddPrimary, AddNoise=AddNoise, DoFilter=DoFilter)
-    
+
+    del alms # free memory
+
     return ksz_lc.kSZ_map
 
 
@@ -283,7 +293,7 @@ def run_pipeline(imock, freq):
 
     print(f"prefactor and recon noise: {prefactor}, {recon_noise}")
 
-    vhat = recon.RunReconstruction(lc, filtered_cmb_map, ComputePower=False, NSIDE=NSIDE)
+    vhat = recon.RunReconstruction(lc, filtered_cmb_map, ComputePower=False, NSIDE=NSIDE, use_T_grid=False)
     print("Old variance: ", np.std(vhat[vhat!=0]))
     vhat *= prefactor * 3e5 # to units of km/s by multiplying by c
     print("New variance: ", np.std(vhat[vhat!=0]))
@@ -298,6 +308,8 @@ def run_pipeline(imock, freq):
     box = lc.BoxSize
     pos_grid = (pos_array - np.min(pos_array, axis=0)) / box # between 0 and 1
     vel_grid = vhat_interp(pos_grid) # interpolated velocities
+    vel_grid *=  lc.T_vals
+    print("T values std: ", np.std(lc.T_vals))
     vel_grid -= np.mean(vel_grid)
     dp = pos_array
     dw = (fkp_weights * comp_weights)
@@ -349,14 +361,17 @@ def run_pipeline(imock, freq):
 from multiprocessing import Pool
 from functools import partial
 
-with Pool(5) as p:
+with Pool(10) as p:
     run_pipeline_f090 = partial(run_pipeline, freq='f090')
-    run_pipeline_f150 = partial(run_pipeline, freq='f150')
-    p_array_f090 = np.array(p.map(run_pipeline_f090, range(1, 100)))
-    p_array_f150 = np.array(p.map(run_pipeline_f150, range(1, 100)))
+    p_array_f090 = np.array(p.map(run_pipeline_f090, range(1, 100))) #100)))
 
 pgv_array_f090 = p_array_f090[:, :20]
 pvv_array_f090 = p_array_f090[:, 20:]
+
+with Pool(10) as p:
+    run_pipeline_f150 = partial(run_pipeline, freq='f150')
+    p_array_f150 = np.array(p.map(run_pipeline_f150, range(1, 100)))
+
 pgv_array_f150 = p_array_f150[:, :20]
 pvv_array_f150 = p_array_f150[:, 20:]
 
