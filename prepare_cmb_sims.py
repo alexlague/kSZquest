@@ -38,7 +38,7 @@ for task in my_tasks:
         ksz_sim *= 1e6 # to match units of ACT sims
         #cmb = hp.alm2map(alm, 1024) # nside of simulated ksz maps
         LMAX = hp.sphtfunc.Alm.getlmax(len(alm))
-        ksz_alm = hp.map2alm(ksz_sim, lmax=LMAX)
+        ksz_alm = 3 * hp.map2alm(ksz_sim, lmax=LMAX) # boost ksz signal?
         alm = ksz_alm + alm # DEBUG TO SEE IF KSZ MAP MATCHES INPUT MOCK CATALOG
         #hp.map2alm(ksz_sim)
         #alm = map2alm(ksz_plus_cmb, lmax=hp.sphtfunc.Alm.getlmax(alm))
