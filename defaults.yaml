@@ -21,8 +21,8 @@ freqs:
 # Inspect the output masked_map.png to make sure this is ok
 rms_threshold: 70.0 # uK-arcmin
 
+# This will apply Pge/Pgg to the CMB map
 apply_gal_filter: True
-gal_filter_location: /home/msyriac/Downloads/cmass_fiducial_model.pkl
   
 
 # Change these paths; these can be shared on a cluster

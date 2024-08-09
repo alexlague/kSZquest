@@ -59,10 +59,12 @@ for task in my_tasks:
         nmap = nmap * mfact
 
         imap = cmap + nmap
-        
+
+        gls,gfls = kutils.get_galaxy_filter()
         alm, falm, ells, theory_filter, wfit, fcls,_,_ = kutils.get_single_frequency_alms(imap, gmasks[freq],ls,bells,
-                                                                                      args.fit_lmin,args.fit_lmax,args.lmin,args.lmax,
-                                                                                      kutils.wfid(args.freq),debug=False,is_sim=True)
+                                                                                          args.fit_lmin,args.fit_lmax,args.lmin,args.lmax,
+                                                                                          kutils.wfid(args.freq),debug=False,is_sim=True,
+                                                                                          gls=gls,gfls=gfls)
         if add_ksz:
             hp.write_alm(f'{paths.out_dir}/sims/alms_{sstr}_simid_{index}_with_ksz.fits',alm,overwrite=True)
             hp.write_alm(f'{paths.out_dir}/sims/filtered_alms_{sstr}_simid_{index}_with_ksz.fits',falm,overwrite=True)

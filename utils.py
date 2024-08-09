@@ -36,7 +36,11 @@ def save_string(args):
         sstr = sstr + f"{key}_{args._dict[key]}_"
     return sstr[:-1]
 
-def get_single_frequency_alms(imap, gmask,ls,bells,fit_lmin,fit_lmax,lmin,lmax,w_fid,debug=False,is_sim=False,ivar=None):
+def get_single_frequency_alms(imap, gmask,ls,bells,fit_lmin,fit_lmax,lmin,lmax,w_fid,debug=False,is_sim=False,ivar=None,gls=None,gfls=None):
+    """
+    If gfls is not None, it is assumed to be an additional filter to apply
+    """
+    
     imap[gmask<=0] = 0
     if debug:
         io.hplot(imap,f"masked_map_{debug}",downgrade=8,mask=0)
@@ -91,10 +95,16 @@ def get_single_frequency_alms(imap, gmask,ls,bells,fit_lmin,fit_lmax,lmin,lmax,w
 
 
     # Construct filters
+
+    if not(gfls is None):
+        ogfls = maps.interp(gls,gfls)(ells)
+    else:
+        ogfls = 1.0
+    
     wnoise = maps.rednoise(ells,wfit,lkneefit,alpha=-3)
-    decon_filter = bls / ((bls**2)*cltt + wnoise)  # filter to apply to map
+    decon_filter = ogfls * bls / ((bls**2)*cltt + wnoise)  # filter to apply to map
     decon_filter[ells<lmin] = 0
-    theory_filter = 1./(cltt + wnoise/bls**2) # filter to use in theory normalization calculations
+    theory_filter = ogfls/(cltt + wnoise/bls**2) # filter to use in theory normalization calculations
     theory_filter[ells<lmin] = 0
 
     if np.any(~np.isfinite(decon_filter)): raise ValueError
@@ -117,3 +127,11 @@ def get_single_frequency_alms(imap, gmask,ls,bells,fit_lmin,fit_lmax,lmin,lmax,w
     
         
         
+def get_galaxy_filter():
+    if defaults['apply_gal_filter']:
+        gls,gfls = np.loadtxt(f'{paths.out_dir}/galaxy_ell_filter.txt',unpack=True)
+    else:
+        gls = None
+        gfls = None
+    return gls, gfls
+

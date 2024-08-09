@@ -30,9 +30,12 @@ for freq in kutils.defaults.freqs:
     ls,bells = kutils.get_beam(args.freq)
 
 
+    gls,gfls = kutils.get_galaxy_filter()
     alm, falm, ells, theory_filter, wfit, fcls,mfact, lkneefit = kutils.get_single_frequency_alms(imap, gmask,ls,bells,
-                                                                                  args.fit_lmin,args.fit_lmax,args.lmin,
-                                                                                  args.lmax,kutils.wfid(args.freq),debug=freq,is_sim=False,ivar=ivar)
+                                                                                                  args.fit_lmin,args.fit_lmax,args.lmin,
+                                                                                                  args.lmax,kutils.wfid(args.freq),debug=freq,
+                                                                                                  is_sim=False,ivar=ivar,
+                                                                                                  gls=gls,gfls=gfls)
     sstr = kutils.save_string(args)
     hp.write_alm(f'{paths.out_dir}/alms_{sstr}.fits',alm,overwrite=True)
     hp.write_alm(f'{paths.out_dir}/filtered_alms_{sstr}.fits',falm,overwrite=True)

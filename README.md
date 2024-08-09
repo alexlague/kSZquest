@@ -7,6 +7,17 @@ Before running these scripts, copy `defaults.yaml` to `defaults_local.yaml` to r
 (You should not edit `defaults.yaml` unless you are making changes to the way the scripts here work and
 want that under git version control.)
 
+Set `apply_gal_filter` to False if you do not want the galaxy box filter to be applied to the CMB map.
+If this is true, the theory filter that is saved (for norm calculation) will also contain the galaxy
+filter.
+
+### Galaxy filter preparation: `prepare_gal_filter.py`
+
+Run this script if you plan to use `apply_gal_filter` to move the galaxy filtering into the CMB
+map (following Kendrick's suggestion).  This will save a `galaxy_ell_filter.txt` to the
+output directory, which will be used in the `prepare_cmb.py` and `prepare_cmb_sims.py`
+stages.
+
 ### Mask generation: `prepare_mask.py`
 
 This converts a Planck 70% galactic mask (on GPC, or PLA) into CAR pixelization in Equatorial coordinates.
