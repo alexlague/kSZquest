@@ -49,27 +49,6 @@ if use_boss_data:
 else:
     mock_dir = '/home/r/rbond/alague/scratch/ksz-pipeline/QPM_mock_data/'
     rand1 = np.loadtxt(mock_dir+'mock_random_DR12_CMASS_N_50x1.rdzw')
-    #rand1 = np.concatenate((rand1, np.loadtxt(mock_dir+'mock_random_DR12_CMASS_S_50x1.rdzw')))
-#rand = np.concatenate((rand1, rand2))
-
-
-
-# Get enclosing rectangle from ACT mask
-#m_dir = "/home/r/rbond/alague/scratch/ksz-pipeline/ksz-analysis/quadratic_estimator/development_code/prepared_maps/"
-#min_dec = {}
-#max_dec = {}
-#min_ra = {}
-#max_ra = {}
-
-#for freq in ['f090', 'f150']:
-#    gmask = enmap.read_map(m_dir+'/mask_' + freq + '.fits')
-#    posmap = gmask.posmap()
-#    dec = posmap[0] # declination in radians
-#    ra = posmap[1] # right ascension in radians
-#    min_dec[freq] = np.rad2deg(np.min(posmap[0][gmask>0]))
-#    max_dec[freq] = np.rad2deg(np.max(posmap[0][gmask>0]))
-#    min_ra[freq] = np.rad2deg(np.min(posmap[1][gmask>0]))
-#    max_ra[freq] = np.rad2deg(np.max(posmap[1][gmask>0]))
 
 def load_galaxy_mock(imock, freq):
     
@@ -87,7 +66,6 @@ def load_galaxy_mock(imock, freq):
         data = np.loadtxt(BOSS_dir+BOSS_file)
     else:
         data = np.loadtxt(mock_dir+'mock_galaxy_DR12_CMASS_N_QPM_' + ID + '.rdzw')
-        #data = np.concatenate((data, np.loadtxt(mock_dir+'mock_galaxy_DR12_CMASS_S_QPM_' + ID + '.rdzw')))
 
     # Remove galaxies outside of redshift range
     z_min = 0.43
@@ -109,15 +87,12 @@ def load_galaxy_mock(imock, freq):
                                                              rand_cat['dec'],
                                                              rand_cat['redshift'], cosmo)
 
-    # Remove galaxies not in ACT mask
+    # Remove galaxies not in ACT footprint
 
     ACT_SLICE = data_cat['dec'] <= 21.6166
     ACT_SLICE_RAND = rand_cat['dec'] <= 21.6166
 
 
-
-    # extract velocities from reconstructed catalog
-    #vel = np.loadtxt(mock_dir + 'recon/bao_reconstructed_velocities_N' + ID + '.dat')
 
     # extract n(z) by inverting FKP weights (assuming P0 = 2e4)
     # for sims
@@ -134,21 +109,17 @@ def load_galaxy_mock(imock, freq):
     nz_z = np.zeros(nbins)
     for i in range(nbins):
         ind = (data[:,2] >= zbin_edges[i]) & (data[:,2] <= zbin_edges[i+1])
-        #var_vel_z[i] = np.var(vel[ind])
         nz_z[i] = np.mean(nz[ind])
 
     # velocity weights
-    P0 = 5e9 #1e11
-    #v2 = CubicSpline(zbins, var_vel_z)(data[:,2])
+    P0 = 5e9 
     v2 = 1500**2
     n = CubicSpline(zbins, nz_z)(data[:,2])
-    vel_weights = 1/(v2+n*P0) #np.ones(len(data[:,2]))
+    vel_weights = 1/(v2+n*P0)
     vel_weights /= np.mean(vel_weights)
 
     # Store data in lightcone object
-    
     FSKY = 0.1
-
 
     # Create lightcone
     lc = lightcone.LightCone(FSKY, Nmesh=Nmesh)
@@ -174,8 +145,6 @@ def load_galaxy_mock(imock, freq):
     lc.fkp_catalog['data/FKPWeight'] = data[:,3][ACT_SLICE]
     lc.fkp_catalog['randoms/FKPWeight'] = rand[:,3][ACT_SLICE_RAND]
 
-    #vel_weights = vel_weights[ACT_SLICE]
-
     lc.minZ = 0.43
     lc.maxZ = 0.7
     lc.nofz = CubicSpline(zbins, nz_z)
@@ -185,9 +154,7 @@ def load_galaxy_mock(imock, freq):
     # Catalog to mesh
     lc.PaintMesh()
 
-    # Compute model
-    #fid_model = '/home/r/rbond/alague/scratch/ksz-pipeline/ksz-analysis/quadratic_estimator/development_code/prepared_maps/cmass_fiducial_model.pkl'
-    #lc.GetPowerSpectraModel(LoadFile=fid_model)
+    # Compute/load model
     lc.GetPowerSpectraModel()
 
     # FKP & Completeness weights
@@ -207,15 +174,7 @@ def load_galaxy_mock(imock, freq):
     return lc, data_cat['Position'][ACT_SLICE], rand_cat['Position'][ACT_SLICE_RAND], wnorm_v, wnorm_gv, wnorm_g, fkp_weights, comp_weights, rand[:,3][ACT_SLICE_RAND], vel_weights[ACT_SLICE]
     
 def load_cmb_mock(jcmbsim, freq):
-    
-    #args.freq = freq
-    #sstr = kutils.save_string(args)
-    
-    #if freq != "f090":
-    #    sstr = sstr.replace("f090", freq)
-    #elif freq != "f150":
-    #    sstr = sstr.replace("f150", freq)
-    
+        
     if use_act_data:
         prefix = "filtered_alms_daynight_daynight_fit_lmax_7980_fit_lmin_1000_freq_"
         suffix = "_lmax_8000_lmin_100.fits"
@@ -225,7 +184,6 @@ def load_cmb_mock(jcmbsim, freq):
         prefix = "sims/filtered_alms_daynight_daynight_fit_lmax_7980_fit_lmin_1000_freq_"
         suffix = "_lmax_8000_lmin_100"
         if with_ksz:
-            #filtered_alms = hp.fitsfunc.read_alm(paths.out_dir + prefix + freq + suffix + '_simid_'  + str(jcmbsim)  + '_with_ksz.fits')
             
             ksz_dir = '/home/r/rbond/alague/scratch/ksz-pipeline/ksz-analysis/quadratic_estimator/development_code/QPM_maps/'
             index = jcmbsim
@@ -265,15 +223,12 @@ def run_pipeline(imock, freq):
     freq: frequency of 'f090' or 'f150' to compute cross-covariance
     '''
 
-    kedges = np.linspace(0, 0.2, 51) #np.linspace(0, 0.2, 17)  #np.linspace(0, 0.2, 26)
-    #Ncmbsims = 1
-    #poles_array = np.zeros((Nkeep, Ncmbsims))
+    kedges = np.linspace(0, 0.2, 51)
 
     # collect lss and cmb data
     lc, data_pos, rand_pos, wnorm_v, wnorm_gv, wnorm_g, fkp_weights, comp_weights, rand_fkp_weights, vel_weights = load_galaxy_mock(imock, freq)
     
     # iterate over cmb realizations
-    #for jcmbsim in [imock]: #range(1, Ncmbsims+1):
     jcmbsim = imock
     filtered_cmb_map = load_cmb_mock(jcmbsim, freq)
 
@@ -291,32 +246,21 @@ def run_pipeline(imock, freq):
         suffix = "_lmax_8000_lmin_100_simid_"
         if with_ksz:
             pass
-        #    fil_path = fil_dir + prefix + freq + suffix + str(jcmbsim) + "_with_ksz.txt"
         else:
             fil_path = fil_dir + prefix + freq + suffix + str(jcmbsim) + ".txt"
 
+    #if the simulations are the ksz component, then we normalize after to match the bv of the data 
     if with_ksz == False:        
         prefactor, recon_noise = recon.CalculateNoiseFromFilter(lc, CMBFilterPath=fil_path)
     else:
         prefactor, recon_noise = 1., 1.
     print(f"prefactor and recon noise: {prefactor}, {recon_noise}")
 
-    # KENDRICK'S METHOD SKIP THIS #
-    vhat = recon.RunReconstruction(lc, filtered_cmb_map, ComputePower=False, NSIDE=NSIDE, use_T_grid=False)
-    #print("Old variance: ", np.std(vhat[vhat!=0]))
-    #vhat *= prefactor * 3e5 # to units of km/s by multiplying by c
-    #print("New variance: ", np.std(vhat[vhat!=0]))
-
-    # reverse the nbodykit shuffle
-    #vhat = np.roll(np.roll(np.roll(vhat, Nmesh//2, axis=0), Nmesh//2, axis=1), Nmesh//2, axis=2)
-    #X = np.linspace(0, 1, Nmesh)
-    #vhat_interp = RegularGridInterpolator((X, X, X), vhat)
     
-    pos_array = np.array(data_pos) #np.array(data_cat['Position'])
-    #box = np.max(pos_array, axis=0) - np.min(pos_array, axis=0)
-    #box = lc.BoxSize
-    #pos_grid = (pos_array - np.min(pos_array, axis=0)) / box # between 0 and 1
-    #vel_grid = vhat_interp(pos_grid) # interpolated velocities
+    vhat = recon.RunReconstruction(lc, filtered_cmb_map, ComputePower=False, NSIDE=NSIDE, use_T_grid=False)
+    
+    pos_array = np.array(data_pos)
+
     
     ## TRYING KENDRICKS METHOD -> USING ONLY (NORMALIZED) TVALS ##
 
@@ -326,7 +270,7 @@ def run_pipeline(imock, freq):
     vel_grid -= np.mean(vel_grid)
     dp = pos_array
     dw = (fkp_weights * comp_weights)
-    rp = np.array(rand_pos) #np.array(rand_cat['Position'])
+    rp = np.array(rand_pos)
     rw = rand_fkp_weights
     vel_grid = vel_grid * comp_weights * vel_weights
 
@@ -373,7 +317,6 @@ def run_pipeline(imock, freq):
                                 dtype='f4', wnorm=wnorm_v, shotnoise=0).poles
 
     pgv = poles_vgr(ell=1, complex=False)
-    #poles_array[jcmbsim-1] =  pk[:Nkeep] # keep only large scales
     poles_gv = pgv[:Nkeep]
 
     pvv = poles_vgr(ell=0, complex=False)
@@ -390,6 +333,7 @@ def run_pipeline(imock, freq):
 from multiprocessing import Pool
 from functools import partial
 
+# Run over set of 99 sims in parallel
 with Pool(10) as p:
     run_pipeline_f090 = partial(run_pipeline, freq='f090')
     p_array_f090 = np.array(p.map(run_pipeline_f090, range(1, 100))) #100)))
@@ -421,6 +365,8 @@ elif with_ksz:
     out_dir += with_ksz_dir
 
 # Save spectra and covmat to file
+# The file extension may need to be editied if computing for SGC (deprecated)
+
 #np.savetxt(out_dir + "Pgv_ell_1_NGC_f090_array.dat", np.array(pgv_array_f090).T)
 np.savetxt(out_dir + "Pgv_ell_1_NGC_f090_array.dat", np.array(pgv_array_f090).T)
 np.savetxt(out_dir + "Pgv_ell_1_NGC_f150_array.dat", np.array(pgv_array_f150).T)
@@ -442,4 +388,3 @@ cov_matrix_full = np.cov(np.array(pgv_array_full))
 np.savetxt(out_dir + "Pgv_ell_1_NGC_full_cov_mat.dat", cov_matrix_full)
 
 print(f"Final covariance matrix shape is {cov_matrix_full.shape}")
-#print(np.cov(np.array(pgv_array, dtype=np.float32).reshape(Nkeep, -1)).shape)
