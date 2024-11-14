@@ -1,0 +1,35 @@
+
+# These arguments will be saved to filenames
+jobargs:
+  # Minimum and maxmimum multipoles of the CMB map used
+  lmin: 100
+  lmax: 8000
+
+  # This is only relevant for fitting the white noise level. Probably no need to change this.
+  fit_lmin: 1000
+  fit_lmax: 7980
+
+  # TODO: change to daynight
+  daynight: "daynight"
+
+# TODO: change to list of both frequencies
+freqs:
+  - 'f090'
+  - 'f150'
+
+# This is relevant for making the mask in prepare_cmb.py
+# Inspect the output masked_map.png to make sure this is ok
+rms_threshold: 70.0 # uK-arcmin
+
+# This will apply Pge/Pgg to the CMB map
+apply_gal_filter: True
+
+# Change these paths; these can be shared on a cluster
+paths:
+  act_root: "/gpfs/fs0/project/r/rbond/msyriac/s08s18_coadd/maps/"
+  planck_root: "/home/r/rbond/alague/scratch/ksz-pipeline/Planck_data/"
+  act_sim_root: "/home/r/rbond/alague/scratch/ksz-pipeline/act_data_and_sims/sims/"
+  boss_root: "/home/r/rbond/alague/scratch/ksz-pipeline/BOSS_data/CMASS/"
+
+  # WARNING: change these to your own local copy
+  out_dir:  "/home/r/rbond/alague/scratch/ksz-pipeline/ksz-analysis/quadratic_estimator/development_code/prepared_maps/"
