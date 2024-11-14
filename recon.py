@@ -251,6 +251,7 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None, NSIDE=None):
         #samples['T'] = T_vals
 
         Source.T_vals = T_vals
+        '''
         T_rand_cat = ArrayCatalog({'Position':data_pos, 'T': T_vals})
         #rand_array = T_rand_cat.to_mesh(BoxSize=Source.BoxSize, Nmesh=Source.Nmesh) # (1 + delta_rand) 
         #rand_array = np.array(rand_array.to_field())
@@ -303,6 +304,10 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None, NSIDE=None):
         
     return T_grid
     #return Source.halo_momentum_mesh.to_field() #T_grid
+        '''
+    return
+
+
 
 def CreateFilters(Source, Iso=True):
     '''
@@ -478,15 +483,15 @@ def CalculateNoiseFromFilter(Source, CMBFilterPath=None):
     
     # Load filter
     fil = np.loadtxt(CMBFilterPath)
-    one_over_cl_interp = interp1d(fil[:,0], fil[:,1], bounds_error=False, fill_value=fil[:,1][-1])
+    one_over_cl_interp = interp1d(fil[:,0], fil[:,1], bounds_error=False, fill_value=(0., fil[:,1][-1])) #fil[:,1][-1])
     
     Pge = Source.Pge_kmu
     Pgg = Source.Pgg_kmu
     
     # Assume isotropic noise with mu = 0
     k_samples = np.geomspace(1e-3, 100, 2000)
-    Pge_samples = Pge(k_samples, 0)
-    Pgg_samples = Pgg(k_samples, 0)
+    Pge_samples = Pge(k_samples) # now removed mu
+    Pgg_samples = Pgg(k_samples)
 
     # Compute integral
     ell_for_int = k_samples * Source.Chi_star
@@ -549,11 +554,11 @@ def RunReconstruction(Source, CMBMap, ClMap=None, RA=None, DEC=None, NSIDE=None,
         delta_e_times_T = delta_e_field * T_grid
     else:
         delta_e_times_T = delta_e_field
-    noise_of_k      = CalculateNoise(Source, delta_e_times_T, filter_dict, ClMap=ClMap, RA=RA, DEC=DEC)
-    vhat_of_k       = (noise_of_k)**-1 * delta_e_times_T.r2c()
+    #noise_of_k      = CalculateNoise(Source, delta_e_times_T, filter_dict, ClMap=ClMap, RA=RA, DEC=DEC)
+    #vhat_of_k       = (noise_of_k)**-1 * delta_e_times_T.r2c()
     
-    vhat_of_k[~np.isfinite(vhat_of_k)] = 0. + 0. * 1j
-    vhat            = vhat_of_k.c2r()
+    #vhat_of_k[~np.isfinite(vhat_of_k)] = 0. + 0. * 1j
+    #vhat            = vhat_of_k.c2r()
     
     ## DEBUG
     vhat = delta_e_times_T
@@ -562,10 +567,10 @@ def RunReconstruction(Source, CMBMap, ClMap=None, RA=None, DEC=None, NSIDE=None,
     #vhat[Source.halo_mesh.to_field()==0.] = 0.
     print(np.max(T_grid))
 
-    vhat_at_halos   = PaintedVelocities(Source, vhat)
-    vhat_fkp_mesh   = ReconstructedVelocityMesh(Source, vhat_at_halos)
+    #vhat_at_halos   = PaintedVelocities(Source, vhat)
+    #vhat_fkp_mesh   = ReconstructedVelocityMesh(Source, vhat_at_halos)
 
-    print(type(delta_e_field))
+    #print(type(delta_e_field))
     
     if type(Source) == nbody.NBodySim and ComputePower and Iso:
         Pk_vv = FFTPower(vhat_of_k, mode='1d', dk=dk, kmax=kmax, kmin=0,).power

@@ -129,7 +129,7 @@ def get_single_frequency_alms(imap, gmask,ls,bells,fit_lmin,fit_lmax,lmin,lmax,w
         
 def get_galaxy_filter():
     if defaults['apply_gal_filter']:
-        gls,gfls = np.loadtxt(f'{paths.out_dir}/galaxy_ell_filter.txt',unpack=True)
+        gls,gfls = np.loadtxt(f'{paths.out_dir}galaxy_ell_filter.txt',unpack=True)
     else:
         gls = None
         gfls = None

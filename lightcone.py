@@ -4,7 +4,7 @@ or generated using an Nbody class
 '''
 
 import numpy as np
-from scipy.interpolate import InterpolatedUnivariateSpline, RegularGridInterpolator
+from scipy.interpolate import InterpolatedUnivariateSpline, RegularGridInterpolator, CubicSpline
 from scipy.optimize import minimize
 from scipy import constants
 
@@ -22,6 +22,7 @@ from nbodykit.algorithms.convpower.catalog import FKPVelocityCatalog
 
 from pypower import CatalogFFTPower, smooth_window
 
+import hmvec as hm
 from hmvec.ksz import get_ksz_auto_squeezed
 
 class LightCone:
@@ -358,22 +359,34 @@ class LightCone:
         zs = np.linspace(self.minZ, self.maxZ, nzbins)
 
         if LoadFile is None:
-            ls = np.arange(1000)
+            #ls = np.arange(1000)
             #Delta_chi = self.cosmo.comoving_distance(self.maxZ) - self.cosmo.comoving_distance(self.minZ)
             #vol = 4 * np.pi/3 * self.FSKY * (Delta_chi/self.cosmo.h)**3
             #vol /= 1000**3 # to Gpc^3
-            vol = 100 # low enough kmin for interpolation
-            ngals = self.nofz(zs) * self.cosmo.h**3 # to 1/Mpc^3
+            #vol = 100 # low enough kmin for interpolation
+            #ngals = self.nofz(zs) * self.cosmo.h**3 # to 1/Mpc^3
             
-            if hasattr(self, "bg"):
-                bgs = self.bg * np.ones(len(zs)) #* self.cosmo.h**3 # TODO moe h^3 correction to bg
-            else:
-                bgs = None
+            #if hasattr(self, "bg"):
+            #    bgs = self.bg * np.ones(len(zs)) #* self.cosmo.h**3 # TODO moe h^3 correction to bg
+            #else:
+            #    bgs = None
         
             #model = get_ksz_auto_squeezed(ells=ls, volume_gpc3=vol, zs=zs, ngals_mpc3=ngals, params=self.CosmoParams, template=True, rsd=True, bgs=bgs)
-            model = get_ksz_auto_squeezed(ells=ls, volume_gpc3=vol, zs=zs, ngals_mpc3=None, params=self.CosmoParams, template=True, rsd=True, bgs=bgs)
+            #model = get_ksz_auto_squeezed(ells=ls, volume_gpc3=vol, zs=zs, ngals_mpc3=None, params=self.CosmoParams, template=True, rsd=True, bgs=bgs)
        
-            self.model = model[2]
+            #self.model = model[2]
+            ks = np.geomspace(1e-5,100,1000)
+
+            minz,maxz,zeff  = 0.43, 0.7, 0.55
+            ngal = 1e-4 # rough CMASS number density Mpc^-3
+            ms = np.geomspace(2e10,1e17,40)
+            hcos = hm.HaloModel([zeff],ks,ms=ms)
+            hcos.add_battaglia_profile("electron",family="AGN")
+            hcos.add_hod(name="g",ngal=np.asarray([ngal]))
+            bg = hcos.hods['g']['bg'][0]  # Note that bg is calculated given the ngal
+            hpge = hcos.get_power_1halo("g","electron") + hcos.get_power_2halo("g","electron")
+            hpggtot = hcos.get_power_1halo("g","g") + hcos.get_power_2halo("g","g") + 1./ngal
+            self.model = {'ks': ks, 'sPge':hpge[0], 'lPggtot': hpggtot[0]} # DEBUG: check factors of h
 
         else:
             # load pre-computed model
@@ -383,17 +396,20 @@ class LightCone:
         #print(self.model.keys())
         # Getting Pkmu at zeff
         
-        mus = np.linspace(-1, 1, len(self.model['lPggtot'][0, 0, :]))
-        Pge_kmu_interp = RegularGridInterpolator((zs, self.model['ks'], mus), self.model['sPge'], bounds_error=False, fill_value=0.)
-        Pgg_kmu_interp = RegularGridInterpolator((zs, self.model['ks'], mus), self.model['lPggtot'], bounds_error=False, fill_value=0.)
+        #mus = np.linspace(-1, 1, len(self.model['lPggtot'][0, 0, :]))
+        #Pge_kmu_interp = RegularGridInterpolator((zs, self.model['ks'], mus), self.model['sPge'], bounds_error=False, fill_value=0.)
+        #Pgg_kmu_interp = RegularGridInterpolator((zs, self.model['ks'], mus), self.model['lPggtot'], bounds_error=False, fill_value=0.)
+        Pge_kmu_interp = CubicSpline(self.model['ks'], self.model['sPge'])
+        Pgg_kmu_interp = CubicSpline(self.model['ks'], self.model['lPggtot'])
+
+        #if hasattr(self, "zeff"):
+        self.Pge_kmu = lambda k: Pge_kmu_interp(k*self.cosmo.h)
+        self.Pgg_kmu = lambda k: Pgg_kmu_interp(k*self.cosmo.h)
+        #else:
+        #self.Pge_kmu = lambda k, mu: Pge_kmu_interp(((self.maxZ+self.minZ)/2, k*self.cosmo.h, mu))
+        #self.Pgg_kmu = lambda k, mu: Pgg_kmu_interp(((self.maxZ+self.minZ)/2, k*self.cosmo.h, mu))
 
 
-        if hasattr(self, "zeff"):
-            self.Pge_kmu = lambda k, mu: Pge_kmu_interp((zeff, k*self.cosmo.h, mu))
-            self.Pgg_kmu = lambda k, mu: Pgg_kmu_interp((zeff, k*self.cosmo.h, mu))
-        else:
-            self.Pge_kmu = lambda k, mu: Pge_kmu_interp(((self.maxZ+self.minZ)/2, k*self.cosmo.h, mu))
-            self.Pgg_kmu = lambda k, mu: Pgg_kmu_interp(((self.maxZ+self.minZ)/2, k*self.cosmo.h, mu))
             
         return
         
