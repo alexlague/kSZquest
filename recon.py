@@ -1,7 +1,7 @@
-'''
-Functions to compute the velocity reconstruction
-from a CMB map and a halo density field
-'''
+####
+# Functions to compute the velocity reconstruction
+# from a CMB map and a halo density field
+###
 
 import numpy as np
 from scipy.interpolate import interp1d, RectBivariateSpline, RegularGridInterpolator, CubicSpline
@@ -80,7 +80,7 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None, NSIDE=None):
         # use RectGridInterpolator to set fill_value to 0. outside RA/DEC range
         # TODO: use regular grid interp everywhere
        
-        # DEBUG T grid procedure
+        # T grid procedure
         ras = np.array(Source.data['ra'])
         decs = np.array(Source.data['dec']) 
         #print(np.min(ras), np.max(ras), np.min(decs), np.max(decs), "0.43", "0.7")
@@ -150,161 +150,22 @@ def CreateTGrid(Source, CMBMap, RA=None, DEC=None, NSIDE=None):
         if CMBMap.ndim == 2:
             RAs = np.linspace(Source.minRA, Source.maxRA, CMBMap.shape[0])
             DECs = np.linspace(Source.minDEC,Source.maxDEC, CMBMap.shape[1])
-            #CMBMap_interp = RegularGridInterpolator((RAs, DECs), CMBMap, bounds_error=False, fill_value=0.)
+            
             CMBMap_interp = RectBivariateSpline(RAs, DECs, CMBMap)
-            #zs = np.linspace(Source.minZ, Source.maxZ, Nmesh)
-            #chis = Source.cosmo.comoving_distance(zs)
-
-            #ras = np.array(Source.data['ra'])
-            ##ras = np.concatenate((ras, np.array(Source.randoms['ra'])))
-            #decs = np.array(Source.data['dec'])
-            #decs = np.concatenate((decs, np.array(Source.randoms['dec'])))
+            
             
             T_vals = CMBMap_interp(ras, decs, grid=False)
             
-            #data_pos = np.array(Source.data['Position'])-np.min(np.array(Source.data['Position']), axis=0)
-            #rand_pos = np.array(Source.randoms['Position'])-np.min(np.array(Source.randoms['Position']), axis=0)
-            #all_pos = data_pos #np.concatenate((data_pos, rand_pos), axis=0)
-
-        # Catalog approach
-        #shuffled_rands_data = {}
-        #shuffled_rands_randoms = {}
-        #shuffled_indx = np.random.shuffle(np.arange(len(Source.randoms['Position'])))
-        #shuffled_rands_randoms['Position'] = Source.randoms['Position']
-        #shuffled_rands_data['Position'] = Source.randoms['Position'][shuffled_indx]
 
         elif CMBMap.ndim == 1:
-            #ras = np.array(Source.data['ra'])
-            #ras = np.concatenate((ras, np.array(Source.randoms['ra'])))
-            #decs = np.array(Source.data['dec'])
-            #decs = np.concatenate((decs, np.array(Source.randoms['dec'])))
             
-            #redshifts = np.array(Source.data['z'])
-            #T_vals = CMBMap_interp((ras, decs)) # switch?
-            
-            #T_fkp = FKPCatalog(Source.randoms, Source.randoms) #Source.fkp_catalog.copy()
-            
-            #T_fkp['data/FKPWeight'] = T_vals # temp map at that ra, dec
-            
-            #for i in range(Nmesh): T_grid[i] = CMBMap_interp((RA_mesh * chis[-1]/chis[i], DEC_mesh * chis[-1]/chis[i]))
-            #for i in range(Nmesh): T_grid[i] = CMBMap_interp((RA_mesh, DEC_mesh))
-            #T_grid = T_fkp.to_mesh(Nmesh=Nmesh, compensated=False, resampler='tsc').to_field() #/ Source.halo_mesh.to_field()
-            #T_grid[np.isnan(T_grid)] = 0.
-            #T_grid[~np.isfinite(T_grid)] = 0.
-            
-            #if CMBMap.ndim == 1:
-            #N = 5
-            
-            #n_samples = Nmesh//32 #N*len(decs) #int(1e7)
-            #samples = RandomCatalog(n_samples**3+len(decs), seed=84)
-        
-            # add the (ra, dec, z) columns
-            #samples['z']   = samples.rng.uniform(low=Source.minZ, high=Source.maxZ, ) 
-            #samples['ra']  = np.repeat(ras, N)
-            #samples['dec'] = np.repeat(decs, N)
-        
-            #samples ={'ra': np.linspace(Source.minRA, Source.maxRA, n_samples), 
-            #          'dec':np.linspace(Source.minDEC, Source.maxDEC, n_samples), 
-            #          'z':np.linspace(Source.minZ, Source.maxZ, n_samples) }
-            
-            #grid = np.mgrid[Source.minRA:Source.maxRA:n_samples*1j, Source.minDEC:Source.maxDEC:n_samples*1j, Source.minZ:Source.maxZ:n_samples*1j]
-            
-            #samples['ra'] = np.concatenate((ras, grid[0].ravel()))
-            #samples['dec'] = np.concatenate((decs, grid[1].ravel()))
-            #samples['z'] = np.concatenate((redshifts, grid[2].ravel()))            
-
-            #do_parallel = False
-
-            #if do_parallel:
-            
-            #    def sky2cart(ra, dec, redshift):
-            #        x, y, z = transform.SkyToCartesion(ra, dec, redshift, cosmo=Source.cosmo)
-            #        return x, y, z
-            
-            #    from multiprocess import Pool
-            #    with Pool(8) as p:
-            #        samples['Position'] = p.map(sky2cart, np.array([grid[0].ravel(), grid[1].ravel(), grid[2].ravel()]).T)
-
-            #else:
-            #    samples['Position'] = transform.SkyToCartesion(samples['ra'], samples['dec'], samples['z'], cosmo=Source.cosmo)
-
-            #samples['Position'] = samples['Position'] - np.min(samples['Position'], axis=0)
-            
-            #samples = Source.data.copy()
-            #ras = np.concatenate((ras, grid[0].ravel())) #grid[0].ravel()
-            #decs = np.concatenate((decs, grid[1].ravel())) #grid[1].ravel()
-            
-            # DEBUG: TRY VEC2PIX
-            pixels = hp.ang2pix(NSIDE, ras, decs, lonlat=True)  #hp.ang2pix(NSIDE, samples['ra'], samples['dec'], lonlat=True)
-            
-            #pixels = hp.vec2pix(NSIDE, data_pos[:,0], data_pos[:,1], data_pos[:,2])
+            # Read pixel values
+            pixels = hp.ang2pix(NSIDE, ras, decs, lonlat=True)  
             T_vals = CMBMap[pixels]
             
-            #T_vals = np.repeat(T_vals, N)
-            #data_pos = np.array(Source.data['Position'])-np.min(np.array(Source.data['Position']), axis=0)
-            
-            #rand_pos = np.array(Source.randoms['Position'])-np.min(np.array(Source.randoms['Position']), axis=0)
-            #samples['Position'] = samples['Position'] - np.min(samples['Position'], axis=0)
-            
-            #all_pos = data_pos #np.concatenate((data_pos, rand_pos), axis=0)
-
-        #samples['T'] = T_vals
 
         Source.T_vals = T_vals
-        '''
-        T_rand_cat = ArrayCatalog({'Position':data_pos, 'T': T_vals})
-        #rand_array = T_rand_cat.to_mesh(BoxSize=Source.BoxSize, Nmesh=Source.Nmesh) # (1 + delta_rand) 
-        #rand_array = np.array(rand_array.to_field())
-        
-        interp = False
-        if interp:
-            x_c = np.linspace(0, Source.BoxSize[0], Source.Nmesh)
-            y_c = np.linspace(0, Source.BoxSize[1], Source.Nmesh)
-            z_c = np.linspace(0, Source.BoxSize[2], Source.Nmesh)
-            rand_array_interp = RegularGridInterpolator((x_c, y_c, z_c), rand_array)
-            rand_array_interp = rand_array_interp(np.array(data_pos)) # 1+ delta at tracers
-            
-            print(rand_array_interp.shape)
-            print(rand_array_interp)
-            T_vals = T_vals / rand_array_interp
-            T_vals[~np.isfinite(T_vals)] = 0.
-        #redshifts = np.array(Source.data['z'])
-        #chis = np.array(Source.cosmo.comoving_distance(redshifts))
-        #z_weights = chis**2 / (1+redshifts)**2
-        #z_weights /= np.mean(z_weights)
-        #T_rand_cat = ArrayCatalog({'Position':data_pos, 'T': z_weights * T_vals}) # samples
-        
-        #T_rand_cat = ArrayCatalog({'Position':data_pos, 'T': T_vals})
-        #T_rand_cat = ArrayCatalog({'Position':data_pos, 'T': T_vals})
-        T_rand_array = T_rand_cat.to_mesh(BoxSize=Source.BoxSize, Nmesh=Source.Nmesh, value='T') # (1 + delta_rand) * T
 
-        # smooth temperature grid
-        from nbodykit.filters import Gaussian, TopHat
-        T_rand_array = T_rand_array.to_field() #apply(Gaussian(50.)).paint(mode='real')
-        
-        #T_rand_array = T_rand_array.apply(TopHat(20.)).paint(mode='real')
-        #T_rand_array = T_rand_array.apply(Gaussian(.01)).paint(mode='real')
-        
-        #rand_array[rand_array==0.] = np.inf
-
-        # Retry division
-        T_grid = np.array(T_rand_array) #/ rand_array # SHOULD DIVIDE HERE?? lower noise if not dividing
-        print("T_grid shape: ", T_grid.shape)
-        #T_grid[rand_array==0.] = 0.
-        
-        
-        for i in range(3):
-            T_grid = np.roll(T_grid, -int(Source.Nmesh/2), axis=i) # shuffle to match other nbodykit meshes
-        
-        #T_grid = ArrayMesh(T_grid, Source.BoxSize).to_field()
-
-        #T_grid -= np.mean(T_grid) # centered around 0
-        
-        #np.save("/home/r/rbond/alague/scratch/ksz-pipeline/ksz-analysis/quadratic_estimator/development_code/T_grid_randoms.npy", T_grid)
-        
-    return T_grid
-    #return Source.halo_momentum_mesh.to_field() #T_grid
-        '''
     return
 
 

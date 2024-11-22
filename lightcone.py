@@ -1,7 +1,7 @@
-'''
-Class to host lightcone loaded from data
-or generated using an Nbody class
-'''
+#####
+# Class to host lightcone loaded from data
+# or generated using an Nbody class
+###
 
 import numpy as np
 from scipy.interpolate import InterpolatedUnivariateSpline, RegularGridInterpolator, CubicSpline
@@ -359,22 +359,7 @@ class LightCone:
         zs = np.linspace(self.minZ, self.maxZ, nzbins)
 
         if LoadFile is None:
-            #ls = np.arange(1000)
-            #Delta_chi = self.cosmo.comoving_distance(self.maxZ) - self.cosmo.comoving_distance(self.minZ)
-            #vol = 4 * np.pi/3 * self.FSKY * (Delta_chi/self.cosmo.h)**3
-            #vol /= 1000**3 # to Gpc^3
-            #vol = 100 # low enough kmin for interpolation
-            #ngals = self.nofz(zs) * self.cosmo.h**3 # to 1/Mpc^3
             
-            #if hasattr(self, "bg"):
-            #    bgs = self.bg * np.ones(len(zs)) #* self.cosmo.h**3 # TODO moe h^3 correction to bg
-            #else:
-            #    bgs = None
-        
-            #model = get_ksz_auto_squeezed(ells=ls, volume_gpc3=vol, zs=zs, ngals_mpc3=ngals, params=self.CosmoParams, template=True, rsd=True, bgs=bgs)
-            #model = get_ksz_auto_squeezed(ells=ls, volume_gpc3=vol, zs=zs, ngals_mpc3=None, params=self.CosmoParams, template=True, rsd=True, bgs=bgs)
-       
-            #self.model = model[2]
             ks = np.geomspace(1e-5,100,1000)
 
             minz,maxz,zeff  = 0.43, 0.7, 0.55
@@ -393,34 +378,25 @@ class LightCone:
             with open(LoadFile, 'rb') as handle:
                 self.model = pickle.load(handle)
 
-        #print(self.model.keys())
-        # Getting Pkmu at zeff
-        
-        #mus = np.linspace(-1, 1, len(self.model['lPggtot'][0, 0, :]))
-        #Pge_kmu_interp = RegularGridInterpolator((zs, self.model['ks'], mus), self.model['sPge'], bounds_error=False, fill_value=0.)
-        #Pgg_kmu_interp = RegularGridInterpolator((zs, self.model['ks'], mus), self.model['lPggtot'], bounds_error=False, fill_value=0.)
+        # Getting Pk at zeff
         Pge_kmu_interp = CubicSpline(self.model['ks'], self.model['sPge'])
         Pgg_kmu_interp = CubicSpline(self.model['ks'], self.model['lPggtot'])
 
-        #if hasattr(self, "zeff"):
         self.Pge_kmu = lambda k: Pge_kmu_interp(k*self.cosmo.h)
         self.Pgg_kmu = lambda k: Pgg_kmu_interp(k*self.cosmo.h)
-        #else:
-        #self.Pge_kmu = lambda k, mu: Pge_kmu_interp(((self.maxZ+self.minZ)/2, k*self.cosmo.h, mu))
-        #self.Pgg_kmu = lambda k, mu: Pgg_kmu_interp(((self.maxZ+self.minZ)/2, k*self.cosmo.h, mu))
+
 
 
             
         return
         
     def FitPgg(self):
+        '''
+        '''
         
-        #nzbins = len(self.model['lPggtot'])
-        #zs = np.linspace(self.minZ, self.maxZ, nzbins)
 
         # TODO: check ell normaliztion of missing 1/2
-        #Pell0   = np.trapz(self.model['lPggtot'], np.linspace(-1, 1, 102), axis=-1).T # integrate over mu
-        #Pell0_interp = RegularGridInterpolator((self.model['ks'], zs), Pell0)
+        
         
         # TODO: check units of plin
         if hasattr(self, "zeff"):
